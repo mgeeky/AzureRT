@@ -13,7 +13,65 @@
 #  <mb [at] binary-offensive.com>    
 #
 
-function Parse-JWTtokenRT {
+Function Get-ARTWhoami {
+    <#
+    .DESCRIPTION
+        Pulls current context information from Az and AzureAD modules and presents them bit nicer.
+
+    .EXAMPLE
+        PS> Get-ARTWhoami
+    #>
+
+    Write-Host ""
+
+    try {
+        $AzContext = Get-AzContext
+        Write-Host "== Azure Portal context:"
+
+        $AzContext | Select Name,Account,Subscription,Tenant | fl
+
+    } catch {
+        Write-Verbose "Azure whoami failed: probably not authenticated to management.azure.com."
+    }
+
+    try {
+        $AzADCurrSess = Get-AzureADCurrentSessionInfo
+        $AzADTenantDetail = Get-AzureADTenantDetail
+
+        Write-Host "== Azure AD context:"
+
+        $AzADCurrSess | Select Account,Environment,Tenant,TenantDomain | fl
+
+    } catch {
+        Write-Verbose "Azure AD whoami failed: probably not authenticated to graph.microsoft.com."
+    }
+
+    try {
+        $AzCli = az account show | convertfrom-json
+
+        Write-Host "== AZ CLI context:"
+
+        $Coll = New-Object System.Collections.ArrayList
+        
+        $obj = [PSCustomObject]@{
+            Username    = $AzCli.User.Name
+            Usertype    = $AzCli.User.Type
+            TenantId    = $AzCli.tenantId
+            TenantName  = $AzCli.name
+            Environment = $AzCli.EnvironmentName
+        }
+
+        $null = $Coll.Add($obj)
+        
+        $Coll | fl
+
+    } catch {
+        Write-Verbose "Azure AD whoami failed: probably not authenticated to graph.microsoft.com."
+    }
+}
+
+Function Parse-JWTtokenRT {
+    [alias("Parse-JWTokenRT")]
     <#
     .DESCRIPTION
         Parses input JWT token and prints it out nicely.

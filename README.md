@@ -41,7 +41,7 @@ NAME
 
 SYNTAX
     Connect-ART [-AccessToken <String>] [-KeyVaultAccessToken <String>] [-SubscriptionId <String>] [-TokenFromAzCli] [<CommonParameters>]
-    
+
     Connect-ART -Username <String> -Password <String> [<CommonParameters>]
 
 DESCRIPTION
@@ -55,6 +55,8 @@ DESCRIPTION
 Currently, following batteries are included:
 
 ### Authentication & Token mechanics 
+
+- *`Get-ARTWhoami`* - Displays our authentication context on Azure, AzureAD and on AZ CLI interfaces.
 
 - *`Connect-ART`* - Invokes `Connect-AzAccount` to authenticate current session to the Azure Portal via provided Access Token or credentials. Skips the burden of providing Tenant ID and Account ID by automatically extracting those from provided Token.
 
