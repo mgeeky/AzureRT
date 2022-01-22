@@ -56,48 +56,48 @@ Currently, following batteries are included:
 
 ### Authentication & Token mechanics 
 
-- *`Get-ARTWhoami`* - Displays our authentication context on Azure, AzureAD and on AZ CLI interfaces.
+- **`Get-ARTWhoami`** - Displays our authentication context on Azure, AzureAD and on AZ CLI interfaces.
 
-- *`Connect-ART`* - Invokes `Connect-AzAccount` to authenticate current session to the Azure Portal via provided Access Token or credentials. Skips the burden of providing Tenant ID and Account ID by automatically extracting those from provided Token.
+- **`Connect-ART`** - Invokes `Connect-AzAccount` to authenticate current session to the Azure Portal via provided Access Token or credentials. Skips the burden of providing Tenant ID and Account ID by automatically extracting those from provided Token.
 
-- *`Connect-ARTAD`* - Invokes `Connect-AzureAD` to authenticate current session to the Azure Active Directory via provided Access Token or credentials. Skips the burden of providing Tenant ID and Account ID by automatically extracting those from provided Token.
+- **`Connect-ARTAD`** - Invokes `Connect-AzureAD` to authenticate current session to the Azure Active Directory via provided Access Token or credentials. Skips the burden of providing Tenant ID and Account ID by automatically extracting those from provided Token.
 
-- *`Connect-ARTADServicePrincipal`* - Invokes `Connect-AzAccount` to authenticate current session to the Azure Portal via provided Access Token or credentials. Skips the burden of providing Tenant ID and Account ID by automatically extracting those from provided Token. Then it creates self-signed PFX certificate and associates it with Service Principal for authentication. Afterwards, authenticates as that Service Principal to AzureAD and deassociates that certificate to cleanup
+- **`Connect-ARTADServicePrincipal`** - Invokes `Connect-AzAccount` to authenticate current session to the Azure Portal via provided Access Token or credentials. Skips the burden of providing Tenant ID and Account ID by automatically extracting those from provided Token. Then it creates self-signed PFX certificate and associates it with Service Principal for authentication. Afterwards, authenticates as that Service Principal to AzureAD and deassociates that certificate to cleanup
 
-- *`Get-ARTAccessTokenAzCli`* - Acquires access token from az cli, via `az account get-access-token`
+- **`Get-ARTAccessTokenAzCli`** - Acquires access token from az cli, via `az account get-access-token`
 
-- *`Get-ARTAccessTokenAz`* - Acquires access token from Az module, via `Get-AzAccessToken` .
+- **`Get-ARTAccessTokenAz`** - Acquires access token from Az module, via `Get-AzAccessToken` .
 
-- *`Get-ARTAccessTokenAzureAD`* - Gets an access token from Azure Active Directory. Authored by [Simon Wahlin, @SimonWahlin ](https://blog.simonw.se/getting-an-access-token-for-azuread-using-powershell-and-device-login-flow/)
+- **`Get-ARTAccessTokenAzureAD`** - Gets an access token from Azure Active Directory. Authored by [Simon Wahlin, @SimonWahlin ](https://blog.simonw.se/getting-an-access-token-for-azuread-using-powershell-and-device-login-flow/)
 
-- *`Parse-JWTtokenRT`* - Parses input JWT token and prints it out nicely.
+- **`Parse-JWTtokenRT`** - Parses input JWT token and prints it out nicely.
 
-- *`Remove-ARTServicePrincipalKey`* - Performs cleanup actions after running `Connect-ARTADServicePrincipal`
+- **`Remove-ARTServicePrincipalKey`** - Performs cleanup actions after running `Connect-ARTADServicePrincipal`
 
 
 ### Recon and Situational Awareness
 
-- *`Get-ARTResource`* - Authenticates to the https://management.azure.com using provided Access Token and pulls accessible resources and permissions that token Owner have against them.
+- **`Get-ARTResource`** - Authenticates to the https://management.azure.com using provided Access Token and pulls accessible resources and permissions that token Owner have against them.
 
-- *`Get-ARTRolePermissions`* - Displays all granted permissions on a specified Azure RBAC role.
+- **`Get-ARTRolePermissions`** - Displays all granted permissions on a specified Azure RBAC role.
 
-- *`Get-ARTADRolePermissions`* - Displays all granted permissions on a specified Azure AD role.
+- **`Get-ARTADRolePermissions`** - Displays all granted permissions on a specified Azure AD role.
 
-- *`Get-ARTAzRoleAssignment`* - Displays a bit easier to read representation of assigned Azure RBAC roles to the currently used Principal.
+- **`Get-ARTAzRoleAssignment`** - Displays a bit easier to read representation of assigned Azure RBAC roles to the currently used Principal.
 
-- *`Get-ARTKeyVaultSecrets`* - Lists all available Azure Key Vault secrets. This cmdlet assumes that requesting user connected to the Azure AD with KeyVaultAccessToken (scoped to https://vault.azure.net) and has "Key Vault Secrets User" role assigned (or equivalent).
+- **`Get-ARTKeyVaultSecrets`** - Lists all available Azure Key Vault secrets. This cmdlet assumes that requesting user connected to the Azure AD with KeyVaultAccessToken (scoped to https://vault.azure.net) and has "Key Vault Secrets User" role assigned (or equivalent).
 
 
 ### Privilege Escalation
 
-- *`Add-ARTUserToGroup`* - Adds a specified Azure AD User to the specified Azure AD Group.
+- **`Add-ARTUserToGroup`** - Adds a specified Azure AD User to the specified Azure AD Group.
 
-- *`Add-ARTUserToRole`* - Adds a specified Azure AD User to the specified Azure AD Role.
+- **`Add-ARTUserToRole`** - Adds a specified Azure AD User to the specified Azure AD Role.
 
 
 ### Lateral Movement
 
-- *`Invoke-ARTAutomationRunbook`* - Creates an Automation Runbook under specified Automation Account and against selected Worker Group. That Runbook will contain Powershell commands to be executed on all the affected Azure VMs.
+- **`Invoke-ARTAutomationRunbook`** - Creates an Automation Runbook under specified Automation Account and against selected Worker Group. That Runbook will contain Powershell commands to be executed on all the affected Azure VMs.
 
 
 ---
