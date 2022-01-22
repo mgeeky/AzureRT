@@ -61,7 +61,7 @@ PS C:\> Get-Help Connect-ART
 
 ### Authentication & Token mechanics 
 
-- **`Get-ARTWhoami`** - Displays our authentication context on `Azure`, `AzureAD`, `Microsoft.Graph` and on `AZ CLI` interfaces.
+- **`Get-ARTWhoami`** - Displays _and validates_ our authentication context on `Azure`, `AzureAD`, `Microsoft.Graph` and on `AZ CLI` interfaces.
 
 - **`Connect-ART`** - Invokes `Connect-AzAccount` to authenticate current session to the Azure Portal via provided Access Token or credentials. Skips the burden of providing Tenant ID and Account ID by automatically extracting those from provided Token.
 
@@ -104,6 +104,8 @@ PS C:\> Get-Help Connect-ART
 
 - **`Add-ARTUserToRole`** - Adds a specified Azure AD User to the specified Azure AD Role.
 
+- **`Add-ARTADAppSecret`** - Add client secret to the Azure AD Applications. Authored by [Nikhil Mittal, @nikhil_mitt](https://twitter.com/nikhil_mitt)
+
 
 ### Lateral Movement
 
@@ -116,7 +118,7 @@ PS C:\> Get-Help Connect-ART
 
 - **`Parse-JWTtokenRT`** - Parses input JWT token and prints it out nicely.
 
-- **`Invoke-ARTRESTMethod`** - Takes Access Token and invokes REST method API request against a specified URI. It also verifies whether provided token has required audience set.
+- **`Get-ARTRESTMethod`** - Takes Access Token and invokes GET REST method API request against a specified URI. It also verifies whether provided token has required audience set.
 
 
 ---
