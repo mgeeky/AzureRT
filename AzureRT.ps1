@@ -100,6 +100,9 @@ Function Parse-JWTtokenRT {
     )
  
     try {
+        $EA = $ErrorActionPreference
+        $ErrorActionPreference = 'silentlycontinue'
+
         if (!$token.Contains(".") -or !$token.StartsWith("eyJ")) { Write-Error "Invalid JWT token!" -ErrorAction Stop }
      
         $tokenheader = $token.Split(".")[0].Replace('-', '+').Replace('_', '/')
@@ -139,6 +142,9 @@ Function Parse-JWTtokenRT {
         Write-Host "[!] Function failed!"
         Throw
         Return
+    }
+    finally {
+        $ErrorActionPreference = $EA
     }
 }
 
@@ -198,6 +204,9 @@ Function Connect-ART {
     )
 
     try {
+        $EA = $ErrorActionPreference
+        $ErrorActionPreference = 'silentlycontinue'
+
         if (-not (Get-Module -ListAvailable -Name Az.Accounts)) {
             Write-Verbose "Az Powershell module not installed or not loaded. Installing it..."
             Install-Module -Name Az -Force -Confirm -Scope CurrentUser -AllowClobber
@@ -274,6 +283,9 @@ Function Connect-ART {
         Throw
         Return
     }
+    finally {
+        $ErrorActionPreference = $EA
+    }
 }
 
 
@@ -308,6 +320,9 @@ Function Connect-ARTADServicePrincipal {
     )
 
     try {
+        $EA = $ErrorActionPreference
+        $ErrorActionPreference = 'silentlycontinue'
+
         $fname = -join ((65..90) + (97..122) | Get-Random -Count 15 | % {[char]$_})
         $certPath = "$Env:Temp\$fname.key.pfx"
         $certStorePath = "cert:\currentuser\my"
@@ -391,6 +406,9 @@ Function Connect-ARTADServicePrincipal {
         Throw
         Return
     }
+    finally {
+        $ErrorActionPreference = $EA
+    }
 }
 
 Function Remove-ARTServicePrincipalKey {
@@ -420,6 +438,9 @@ Function Remove-ARTServicePrincipalKey {
     )
 
     try {
+        $EA = $ErrorActionPreference
+        $ErrorActionPreference = 'silentlycontinue'
+
         $certStorePath = "cert:\currentuser\my"
         $certPath = "$Env:Temp\*.key.pfx"
 
@@ -446,6 +467,9 @@ Function Remove-ARTServicePrincipalKey {
         Write-Host "[!] Function failed!"
         Throw
         Return
+    }
+    finally {
+        $ErrorActionPreference = $EA
     }
 }
 
@@ -493,6 +517,9 @@ Function Connect-ARTAD {
     )
 
     try {
+        $EA = $ErrorActionPreference
+        $ErrorActionPreference = 'silentlycontinue'
+
         if (-not (Get-Module -ListAvailable -Name AzureAD)) {
             Write-Verbose "AzureAD Powershell module not installed or not loaded. Installing it..."
             Install-Module -Name AzureAD -Force -Confirm -Scope CurrentUser -AllowClobber
@@ -547,6 +574,9 @@ Function Connect-ARTAD {
         Throw
         Return
     }
+    finally {
+        $ErrorActionPreference = $EA
+    }
 }
 
 
@@ -570,6 +600,9 @@ Function Get-ARTAccessTokenAzCli {
     )
 
     try {
+        $EA = $ErrorActionPreference
+        $ErrorActionPreference = 'silentlycontinue'
+
         $token = $null
 
         if($Resource -ne $null -and $Resource.Length -gt 0) {
@@ -588,6 +621,9 @@ Function Get-ARTAccessTokenAzCli {
         Write-Host "[!] Function failed!"
         Throw
         Return
+    }
+    finally {
+        $ErrorActionPreference = $EA
     }
 }
 
@@ -611,6 +647,9 @@ Function Get-ARTAccessTokenAz {
     )
 
     try {
+        $EA = $ErrorActionPreference
+        $ErrorActionPreference = 'silentlycontinue'
+
         $token = $null
 
         if($Resource -ne $null -and $Resource.Length -gt 0) {
@@ -629,6 +668,9 @@ Function Get-ARTAccessTokenAz {
         Write-Host "[!] Function failed!"
         Throw
         Return
+    }
+    finally {
+        $ErrorActionPreference = $EA
     }
 }
 
@@ -705,6 +747,9 @@ function Get-ARTAccessTokenAzureAD {
         $Timeout = 300
     )
     try {
+        $EA = $ErrorActionPreference
+        $ErrorActionPreference = 'silentlycontinue'
+
         $DeviceCodeRequestParams = @{
             Method = 'POST'
             Uri    = "https://login.microsoftonline.com/$TenantID/oauth2/devicecode"
@@ -818,6 +863,9 @@ Function Get-ARTResource {
     )
 
     try {
+        $EA = $ErrorActionPreference
+        $ErrorActionPreference = 'silentlycontinue'
+
         if ($AccessToken -eq $null -or $AccessToken -eq ""){ 
             Write-Verbose "Access Token not provided. Requesting one from Get-AzAccessToken ..."
             $AccessToken = Get-ARTAccessTokenAz
@@ -917,6 +965,9 @@ Function Get-ARTResource {
         Throw
         Return
     }
+    finally {
+        $ErrorActionPreference = $EA
+    }
 }
 
 Function Get-ARTADRolePermissions {
@@ -939,12 +990,18 @@ Function Get-ARTADRolePermissions {
     )
 
     try {
+        $EA = $ErrorActionPreference
+        $ErrorActionPreference = 'silentlycontinue'
+
         (Get-AzureADMSRoleDefinition -Filter "displayName eq '$RoleName'").RolePermissions | select -Expand AllowedResourceActions | Format-List
     }
     catch {
         Write-Host "[!] Function failed!"
         Throw
         Return
+    }
+    finally {
+        $ErrorActionPreference = $EA
     }
 }
 
@@ -968,6 +1025,9 @@ Function Get-ARTRolePermissions {
     )
 
     try {
+        $EA = $ErrorActionPreference
+        $ErrorActionPreference = 'silentlycontinue'
+
         try {
             $role = Get-AzRoleDefinition -Name $RoleName
         }
@@ -1014,6 +1074,9 @@ Function Get-ARTRolePermissions {
         Write-Host "[!] Function failed!"
         Throw
         Return
+    }
+    finally {
+        $ErrorActionPreference = $EA
     }
 }
 
@@ -1078,6 +1141,9 @@ Function Invoke-ARTAutomationRunbook {
     )
 
     try {
+        $EA = $ErrorActionPreference
+        $ErrorActionPreference = 'silentlycontinue'
+
         if ($ScriptPath -ne $null -and $Command -ne $null -and $ScriptPath.Length -gt 0 -and $Command.Length -gt 0) {
             Write-Error "-ScriptPath and -Command are mutually exclusive. Pick one to continue."
             Return
@@ -1162,6 +1228,9 @@ Function Invoke-ARTAutomationRunbook {
         Throw
         Return
     }
+    finally {
+        $ErrorActionPreference = $EA
+    }
 }
 
 
@@ -1192,6 +1261,9 @@ Function Add-ARTUserToGroup {
     )
 
     try {
+        $EA = $ErrorActionPreference
+        $ErrorActionPreference = 'silentlycontinue'
+
         $User = Get-AzureADUser | ? { $_.ObjectId -eq $Account -or $_.DisplayName -eq $Account -or $_.UserPrincipalName -eq $Account }
 
         if ($User -eq $null -or $User.ObjectId -eq $null) {
@@ -1215,6 +1287,9 @@ Function Add-ARTUserToGroup {
         Throw
         Return
     }
+    finally {
+        $ErrorActionPreference = $EA
+    }
 }
 
 Function Get-ARTAzRoleAssignment {
@@ -1227,6 +1302,9 @@ Function Get-ARTAzRoleAssignment {
     #>
 
     try {
+        $EA = $ErrorActionPreference
+        $ErrorActionPreference = 'silentlycontinue'
+
         $roles = Get-AzRoleAssignment
         $Coll = New-Object System.Collections.ArrayList
         $roles | % {
@@ -1251,6 +1329,9 @@ Function Get-ARTAzRoleAssignment {
         Write-Host "[!] Function failed!"
         Throw
         Return
+    }
+    finally {
+        $ErrorActionPreference = $EA
     }
 }
 
@@ -1281,6 +1362,9 @@ Function Add-ARTUserToRole {
     )
 
     try {
+        $EA = $ErrorActionPreference
+        $ErrorActionPreference = 'silentlycontinue'
+
         $User = Get-AzureADUser | ? { $_.ObjectId -eq $Account -or $_.DisplayName -eq $Account -or $_.UserPrincipalName -eq $Account }
 
         if ($User -eq $null -or $User.ObjectId -eq $null) {
@@ -1304,6 +1388,9 @@ Function Add-ARTUserToRole {
         Throw
         Return
     }
+    finally {
+        $ErrorActionPreference = $EA
+    }
 }
 
 
@@ -1319,6 +1406,9 @@ Function Get-ARTKeyVaultSecrets {
     #>
     
     try {
+        $EA = $ErrorActionPreference
+        $ErrorActionPreference = 'silentlycontinue'
+
         $Coll = New-Object System.Collections.ArrayList
         
         Get-AzKeyVault | % {
@@ -1348,5 +1438,8 @@ Function Get-ARTKeyVaultSecrets {
         Write-Host "[!] Function failed!"
         Throw
         Return
+    }
+    finally {
+        $ErrorActionPreference = $EA
     }
 }
