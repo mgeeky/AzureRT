@@ -1,7 +1,24 @@
 # AzureRT 
 
 Powershell module implementing various cmdlets to interact with Azure and Azure AD from an offensive perspective.
+
 Helpful utilities dealing with access token based authentication, easily switching from `Az` to `AzureAD` and `az cli` interfaces, easy to use pre-made attacks such as Runbook-based command execution and more.
+
+---
+
+## Use Cases
+
+Cmdlets implemented in this module came helpful in following use & attack scenarios:
+
+- Juggling with access tokens from `Az` to `AzureAD` and back again.
+- Nicely print authentication context (aka _whoami_) in `Az`,  `AzureAD` and `az cli` at the same time
+- Display available permissions granted to the user on a target Azure VM
+- Display accessible Azure Resources along with permissions we have against them
+- Easily read all accessible _Azure Key Vault_ secrets
+- Authenticate as a Service Principal to leverage _Privileged Role Administrator_ role assigned to that Service Principal
+- Execute attack against Azure Automation via malicious Runbook
+
+I'm developing next cmdlets along the way of learning Azure & Azure AD threat surface and offensive perspective. Therefore, most of these cmdlets came handy to me at least once on my journey.
 
 ---
 
@@ -19,11 +36,13 @@ Install-Module AzureADPreview -Force -Confirm -AllowClobber
 
 Even though only first two modules are required by `AzureRT`, its good to have others pre-installed too.
 
-Then to load this module, one simply types:
+Then to load this module, simply type:
 
 ```
 PS> . .\AzureRT.ps1
 ```
+
+And you're good to go.
 
 ---
 
@@ -56,7 +75,7 @@ Currently, following batteries are included:
 
 ### Authentication & Token mechanics 
 
-- **`Get-ARTWhoami`** - Displays our authentication context on Azure, AzureAD and on AZ CLI interfaces.
+- **`Get-ARTWhoami`*h* - Displays our authentication context on Azure, AzureAD and on AZ CLI interfaces.
 
 - **`Connect-ART`** - Invokes `Connect-AzAccount` to authenticate current session to the Azure Portal via provided Access Token or credentials. Skips the burden of providing Tenant ID and Account ID by automatically extracting those from provided Token.
 
@@ -75,7 +94,7 @@ Currently, following batteries are included:
 - **`Remove-ARTServicePrincipalKey`** - Performs cleanup actions after running `Connect-ARTADServicePrincipal`
 
 
-### Recon and Situational Awareness
+### Recon & Situational Awareness
 
 - **`Get-ARTResource`** - Authenticates to the https://management.azure.com using provided Access Token and pulls accessible resources and permissions that token Owner have against them.
 
