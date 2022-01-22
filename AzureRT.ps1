@@ -9,6 +9,8 @@
 # Requirements:
 #   Install-Module Az
 #   Install-Module AzureAD
+#   Install-Module Microsoft.Graph (optional)
+#   az cli (optional)
 #
 # Author: 
 #  Mariusz Banach / mgeeky, '22
@@ -42,12 +44,12 @@ Function Get-ARTWhoami {
 
     try {
         $AzContext = Get-AzContext
-        Write-Host "== Azure context:"
+        Write-Host "== Azure context (Az module):"
 
         if($CheckToken) {
             try {
                 Get-AzTenant -ErrorAction SilentlyContinue | Out-Null
-                Write-Host "[+] Token is valid on Azure."
+                Write-Host "`n[+] Token is valid on Azure."
             }
             catch {
                 Write-Host "`n[-] Token is invalid on Azure."
@@ -62,9 +64,8 @@ Function Get-ARTWhoami {
 
     try {
         $AzADCurrSess = Get-AzureADCurrentSessionInfo
-        #$AzADTenantDetail = Get-AzureADTenantDetail
 
-        Write-Host "== Azure AD context:"
+        Write-Host "== Azure AD context (AzureAD module):"
 
         if($CheckToken) {
             try {
@@ -77,6 +78,32 @@ Function Get-ARTWhoami {
         }
 
         $AzADCurrSess | Select Account,Environment,Tenant,TenantDomain | fl
+
+    } catch {
+        Write-Warning "[!] Not authenticated to Azure AD.`n"
+    }
+
+    try {
+        $mgContext = Get-MGContext
+
+        Write-Host "== Microsoft Graph context (Microsoft.Graph module):"
+
+        if($CheckToken) {
+            try {
+                Get-MGOrganization -ErrorAction SilentlyContinue | Out-Null
+                Write-Host "`n[+] Token is valid on Microsoft Graph."
+            }
+            catch {
+                if($PSItem.Exception.Message -like '*Insufficient privileges to complete the operation*') {
+                    Write-Host "`n[+] Token is valid on Microsoft Graph."
+                }
+                else {
+                    Write-Host "`n[-] Token is invalid on Microsoft Graph."
+                }
+            }
+        }
+
+        $mgContext | Select Account,AppName,ContextScope,ClientId,TenantId,AuthType | fl
 
     } catch {
         Write-Warning "[!] Not authenticated to Azure AD.`n"
@@ -653,10 +680,10 @@ Function Remove-ARTServicePrincipalKey {
 Function Connect-ARTAD {
     <#
     .SYNOPSIS
-        Connects to the Azure AD.
+        Connects to the Azure AD and Microsoft.Graph
 
     .DESCRIPTION
-        Invokes Connect-AzureAD to authenticate current session to the Azure Active Directory via provided Access Token or credentials.
+        Invokes Connect-AzureAD (and Connect.MgGraph if module is installed) to authenticate current session to the Azure AD via provided Access Token or credentials.
         Skips the burden of providing Tenant ID and Account ID by automatically extracting those from provided Token.
 
     .PARAMETER AccessToken
@@ -740,6 +767,10 @@ Function Connect-ARTAD {
 
             Connect-AzureAD -AadAccessToken $AccessToken -TenantId $tenant -AccountId $account
 
+            if(Get-Command Connect-MgGraph) {
+                Connect-MgGraph -AccessToken $AccessToken
+            }
+
             if ($PSCmdlet.MyInvocation.BoundParameters["Verbose"].IsPresent) {
                 Parse-JWTtokenRT $AccessToken
             }
@@ -750,6 +781,10 @@ Function Connect-ARTAD {
             
             Write-Verbose "Azure AD authentication via provided creds..."
             Connect-AzureAD -Credential $creds
+
+            if(Get-Command Connect-MgGraph) {
+                Connect-MgGraph -Credential $creds
+            }
         }
     }
     catch {
@@ -1915,6 +1950,83 @@ Function Get-ARTADAccess {
             if ($PSCmdlet.MyInvocation.BoundParameters["Verbose"].IsPresent) {
                 throw
             }
+        }
+    }
+    catch {
+        Write-Host "[!] Function failed!"
+        Throw
+        Return
+    }
+    finally {
+        $ErrorActionPreference = $EA
+    }
+}
+
+
+Function Invoke-ARTRESTMethod {
+    <#
+    .SYNOPSIS
+        Invokes REST Method to the specified URI.
+
+    .DESCRIPTION
+        Takes Access Token and invokes REST method API request against a specified URI. It also verifies whether provided token has required audience set.
+
+    .PARAMETER Uri
+        URI to invoke. For instance: https://graph.microsoft.com/v1.0/applications
+
+    .PARAMETER AccessToken
+        Access Token to use for authentication.
+
+    .PARAMETER Json
+        Return results as JSON.
+
+    .EXAMPLE
+        PS> Invoke-ARTRESTMethod -Uri "https://management.azure.com/subscriptions?api-version=2020-01-01" -AccessToken $token
+    #>
+
+    [CmdletBinding()]
+    Param(
+        [Parameter(Mandatory=$True)]
+        [String]
+        $AccessToken,    
+
+        [Parameter(Mandatory=$True)]
+        [String]
+        $Uri,
+
+        [Parameter(Mandatory=$False)]
+        [Switch]
+        $Json
+    )
+
+    try {
+        $EA = $ErrorActionPreference
+        $ErrorActionPreference = 'silentlycontinue'
+
+        $parsed = Parse-JWTtokenRT $AccessToken
+
+        $tokenhost = [System.Uri]($parsed.aud).Host
+        $requesthost = [System.Uri]($Uri).Host
+
+        if($tokenhost -ne $requesthost) {
+            Write-Warning "Request Host ($requesthost) differs from Token Audience host ($tokenhost). Authentication failure may occur."
+        }
+
+        $params = @{
+            Method  = 'GET'
+            Uri     = $Uri
+            Headers = @{
+                'Authorization' = "Bearer $AccessToken"
+            }
+        }
+
+        $out = (Invoke-RestMethod @params).value
+
+        if($Json) {
+            $out | ConvertTo-Json
+        }
+        else {
+            $out
         }
     }
     catch {
