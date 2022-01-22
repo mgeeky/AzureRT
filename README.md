@@ -10,21 +10,21 @@ Helpful utilities dealing with access token based authentication, easily switchi
 
 ### Authentication & Token mechanics 
 
-- *`Connect-ART`* - Invokes Connect-AzAccount to authenticate current session to the Azure Portal via provided Access Token or credentials. Skips the burden of providing Tenant ID and Account ID by automatically extracting those from provided Token.
+- *`Connect-ART`* - Invokes `Connect-AzAccount` to authenticate current session to the Azure Portal via provided Access Token or credentials. Skips the burden of providing Tenant ID and Account ID by automatically extracting those from provided Token.
 
-- *`Connect-ARTAD`* - Invokes Connect-AzureAD to authenticate current session to the Azure Active Directory via provided Access Token or credentials. Skips the burden of providing Tenant ID and Account ID by automatically extracting those from provided Token.
+- *`Connect-ARTAD`* - Invokes `Connect-AzureAD` to authenticate current session to the Azure Active Directory via provided Access Token or credentials. Skips the burden of providing Tenant ID and Account ID by automatically extracting those from provided Token.
 
-- *`Connect-ARTADServicePrincipal`* - Invokes Connect-AzAccount to authenticate current session to the Azure Portal via provided Access Token or credentials. Skips the burden of providing Tenant ID and Account ID by automatically extracting those from provided Token. Then it creates self-signed PFX certificate and associates it with Service Principal for authentication. Afterwards, authenticates as that Service Principal to AzureAD and deassociates that certificate to cleanup
+- *`Connect-ARTADServicePrincipal`* - Invokes `Connect-AzAccount` to authenticate current session to the Azure Portal via provided Access Token or credentials. Skips the burden of providing Tenant ID and Account ID by automatically extracting those from provided Token. Then it creates self-signed PFX certificate and associates it with Service Principal for authentication. Afterwards, authenticates as that Service Principal to AzureAD and deassociates that certificate to cleanup
 
-- *`Get-ARTAccessTokenAzCli`* - Acquires access token from az cli, via az accound get-access-token
+- *`Get-ARTAccessTokenAzCli`* - Acquires access token from az cli, via `az account get-access-token`
 
-- *`Get-ARTAccessTokenAz`* - Acquires access token from Az module, via Get-AzAccessToken .
+- *`Get-ARTAccessTokenAz`* - Acquires access token from Az module, via `Get-AzAccessToken` .
 
 - *`Get-ARTAccessTokenAzureAD`* - Gets an access token from Azure Active Directory. Authored by [Simon Wahlin, @SimonWahlin ](https://blog.simonw.se/getting-an-access-token-for-azuread-using-powershell-and-device-login-flow/)
 
 - *`Parse-JWTtokenRT`* - Parses input JWT token and prints it out nicely.
 
-- *`Remove-ARTServicePrincipalKey`* - Performs cleanup actions after running Connect-ARTADServicePrincipal
+- *`Remove-ARTServicePrincipalKey`* - Performs cleanup actions after running `Connect-ARTADServicePrincipal`
 
 
 ### Recon and Situational Awareness
