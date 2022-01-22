@@ -1,12 +1,14 @@
 #
 # Azure Red Team Powershell module.
 #
-# Set of useful cmdlets used to collect reconnessaince data, query Azure, Azure AD or Office365 for valuable intelligence and perform various offensive
-# activities using solely JWT Access Token or by interacting with related Powershell modules (Az, AzureAD, AzureADPreview) as well as AZ CLI.
+# Set of useful cmdlets used to collect reconnessaince data, query Azure, Azure AD or 
+# Office365 for valuable intelligence and perform various offensive activities using 
+# solely JWT Access Token or by interacting with related Powershell modules 
+# (Az, AzureAD, AzureADPreview) as well as AZ CLI.
 #
 # Requirements:
-#   Az
-#   AzureAD
+#   Install-Module Az
+#   Install-Module AzureAD
 #
 # Author: 
 #  Mariusz Banach / mgeeky, '22
@@ -171,9 +173,18 @@ Function Connect-ART {
     .PARAMETER Password
         Specifies Azure portal password.
 
+    .PARAMETER TenantId
+        When authenticating as a Service Principal, the Tenant ID must be specifed.
+
     .EXAMPLE
+        Example 1: Authentication as a user to the Azure via Access Token:
         PS> Connect-ART -AccessToken 'eyJ0eXA...'
+        
+        Example 2: Authentication as a user to the Azure via Credentials:
         PS> Connect-ART -Username test@test.onmicrosoft.com -Password Foobar123%
+
+        Example 3: Authentication as a Service Principal to the Azure via Credentials - Client ID and Client Secret:
+        PS> Connect-ART -ServicePrincipal -Username e5a497f0-e696-11eb-b57b-00155d01ef0d -Password 'sfs~~dsdsfssdfsdfsd' -TenantId b413826f-108d-4049-8c11-d52d5d388768
     #>
 
     [CmdletBinding(DefaultParameterSetName = 'Token')]
@@ -200,7 +211,15 @@ Function Connect-ART {
 
         [Parameter(Mandatory=$True, ParameterSetName = 'Credentials')]
         [String]
-        $Password = $null
+        $Password = $null,
+
+        [Parameter(Mandatory=$False, ParameterSetName = 'Credentials')]
+        [Switch]
+        $ServicePrincipal,
+
+        [Parameter(Mandatory=$False, ParameterSetName = 'Credentials')]
+        [String]
+        $TenantId
     )
 
     try {
@@ -275,7 +294,12 @@ Function Connect-ART {
             $creds = New-Object System.Management.Automation.PSCredential ($Username, $passwd)
             
             Write-Verbose "Azure authentication via provided creds..."
-            Connect-AzAccount -Credential $creds
+
+            if($ServicePrincipal) {
+                Connect-AzAccount -Credential $creds -ServicePrincipal -Tenant 
+            } Else {
+                Connect-AzAccount -Credential $creds
+            }
         }
     }
     catch {
