@@ -75,7 +75,7 @@ Currently, following batteries are included:
 
 ### Authentication & Token mechanics 
 
-- **`Get-ARTWhoami`*h* - Displays our authentication context on Azure, AzureAD and on AZ CLI interfaces.
+- **`Get-ARTWhoami`** - Displays our authentication context on Azure, AzureAD and on AZ CLI interfaces.
 
 - **`Connect-ART`** - Invokes `Connect-AzAccount` to authenticate current session to the Azure Portal via provided Access Token or credentials. Skips the burden of providing Tenant ID and Account ID by automatically extracting those from provided Token.
 
