@@ -22,28 +22,32 @@ Function Get-ARTWhoami {
         PS> Get-ARTWhoami
     #>
 
+    $EA = $ErrorActionPreference
+    $ErrorActionPreference = 'silentlycontinue'
+
     Write-Host ""
 
     try {
         $AzContext = Get-AzContext
-        Write-Host "== Azure Portal context:"
+        Write-Host "== Azure context:"
 
         $AzContext | Select Name,Account,Subscription,Tenant | fl
 
     } catch {
-        Write-Verbose "Azure whoami failed: probably not authenticated to management.azure.com."
+        Write-Warning "[!] Not authenticated to Azure.`n"
     }
 
     try {
         $AzADCurrSess = Get-AzureADCurrentSessionInfo
-        $AzADTenantDetail = Get-AzureADTenantDetail
+        #$AzADTenantDetail = Get-AzureADTenantDetail
+
 
         Write-Host "== Azure AD context:"
 
         $AzADCurrSess | Select Account,Environment,Tenant,TenantDomain | fl
 
     } catch {
-        Write-Verbose "Azure AD whoami failed: probably not authenticated to graph.microsoft.com."
+        Write-Warning "[!] Not authenticated to Azure AD.`n"
     }
 
     try {
@@ -66,8 +70,10 @@ Function Get-ARTWhoami {
         $Coll | fl
 
     } catch {
-        Write-Verbose "Azure AD whoami failed: probably not authenticated to graph.microsoft.com."
+        Write-Warning "[!] Not authenticated to AZ CLI.`n"
     }
+
+    $ErrorActionPreference = $EA
 }
 
 Function Parse-JWTtokenRT {
