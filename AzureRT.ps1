@@ -50,7 +50,7 @@ Function Get-ARTWhoami {
         Example 3: Will show only Az and AzureAD authentication context:
         PS> Get-ARTWhoami -Az -AzureAD
     #>
-    
+
     [cmdletbinding()]
     param(
         [Switch]
@@ -1994,6 +1994,21 @@ Function Get-ARTADAccess {
             }
             else {
                 Write-Host "[-] User does not have any Azure AD Roles assigned."
+
+                if(Get-Command Get-MGContext) {
+                    $users = Get-MgUser
+
+                    if ($users -eq $null -or $users.Length -eq 0) {
+                        Write-Host "[-] User does not have access to Microsoft.Graph either."
+                        Return
+                    }
+                    
+                    $roles = Get-ARTADRoleAssignment
+                    if ($roles -ne $null -and $roles.Length -gt 0) {
+                        Write-Host "[+] However user does have access via Microsoft Graph to Azure AD - and these are his Roles Assigned:"
+                        $roles | ft
+                    }
+                }
             }
         }
         catch {
