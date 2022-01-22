@@ -31,6 +31,27 @@ PS> . .\AzureRT.ps1
 
 The module will be gradually receiving next tools and utilities, naturally categorised onto subsequent kill chain phases. 
 
+Every cmdlet has a nice help message detailing parameters, description and example usage:
+
+```
+PS C:\> Get-Help Connect-ART
+
+NAME
+    Connect-ART
+
+SYNTAX
+    Connect-ART [-AccessToken <String>] [-KeyVaultAccessToken <String>] [-SubscriptionId <String>] [-TokenFromAzCli] [<CommonParameters>]
+    
+    Connect-ART -Username <String> -Password <String> [<CommonParameters>]
+
+DESCRIPTION
+    Invokes Connect-AzAccount to authenticate current session to the Azure Portal via provided Access Token or credentials.
+    Skips the burden of providing Tenant ID and Account ID by automatically extracting those from provided Token.
+
+[...]
+```
+
+
 Currently, following batteries are included:
 
 ### Authentication & Token mechanics 
