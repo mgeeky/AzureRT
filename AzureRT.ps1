@@ -28,111 +28,163 @@ Function Get-ARTWhoami {
     .PARAMETER CheckToken
         When used will attempt to validate token.
 
+    .PARAMETER Az
+        Show Az authentication context.
+
+    .PARAMETER AzureAD
+        Show AzureAD authentication context.
+
+    .PARAMETER MGraph
+        Show MGraph authentication context.
+
+    .PARAMETER AzCli
+        Show az cli authentication context.
+
     .EXAMPLE
+        Example 1: Will show all authentication contexts supported (Az, AzureAD, MGraph, az cli)
         PS> Get-ARTWhoami
+
+        Example 2: Will show all authentication contexts supported and validate access tokens:
+        PS> Get-ARTWhoami -CheckToken
+
+        Example 3: Will show only Az and AzureAD authentication context:
+        PS> Get-ARTWhoami -Az -AzureAD
     #>
+    
     [cmdletbinding()]
     param(
         [Switch]
-        $CheckToken
+        $CheckToken,
+
+        [Switch]
+        $Az,
+
+        [Switch]
+        $AzureAD,
+
+        [Switch]
+        $MGraph,
+
+        [Switch]
+        $AzCli
     )
+
+    $All = $true
+
+    if($Az -or $AzureAD -or $MGraph -or $AzCli) {
+        $All = $false
+    }
 
     $EA = $ErrorActionPreference
     $ErrorActionPreference = 'silentlycontinue'
 
     Write-Host ""
 
-    try {
-        $AzContext = Get-AzContext
-        Write-Host "== Azure context (Az module):"
+    if((Get-Command Get-AzContext) -and ($All -or $Az)) {
+        try {
+            $AzContext = Get-AzContext
+            Write-Host "== Azure context (Az module):"
 
-        if($CheckToken) {
-            try {
-                Get-AzTenant -ErrorAction SilentlyContinue | Out-Null
-                Write-Host "`n[+] Token is valid on Azure."
+            if($CheckToken) {
+                try {
+                    Get-AzTenant -ErrorAction SilentlyContinue | Out-Null
+                    Write-Host "`n[+] Token is valid on Azure."
+                }
+                catch {
+                    Write-Host "`n[-] Token is invalid on Azure."
+                }
             }
-            catch {
-                Write-Host "`n[-] Token is invalid on Azure."
-            }
+            
+            $AzContext | Select Name,Account,Subscription,Tenant | fl
+
+        } catch {
+            Write-Warning "[!] Not authenticated to Azure.`n"
         }
-        
-        $AzContext | Select Name,Account,Subscription,Tenant | fl
-
-    } catch {
-        Write-Warning "[!] Not authenticated to Azure.`n"
     }
 
-    try {
-        $AzADCurrSess = Get-AzureADCurrentSessionInfo
+    if((Get-Command Get-AzureADCurrentSessionInfo) -and ($All -or $AzureAD)) {
+        try {
+            $AzADCurrSess = Get-AzureADCurrentSessionInfo
 
-        Write-Host "== Azure AD context (AzureAD module):"
+            Write-Host "== Azure AD context (AzureAD module):"
 
-        if($CheckToken) {
-            try {
-                Get-AzureADTenantDetail -ErrorAction SilentlyContinue | Out-Null
-                Write-Host "`n[+] Token is valid on Azure AD."
+            if($CheckToken) {
+                try {
+                    Get-AzureADTenantDetail -ErrorAction SilentlyContinue | Out-Null
+                    Write-Host "`n[+] Token is valid on Azure AD."
+                }
+                catch {
+                    Write-Host "`n[-] Token is invalid on Azure AD."
+                }
             }
-            catch {
-                Write-Host "`n[-] Token is invalid on Azure AD."
-            }
+
+            $AzADCurrSess | Select Account,Environment,Tenant,TenantDomain | fl
+
+        } catch {
+            Write-Warning "[!] Not authenticated to Azure AD.`n"
         }
-
-        $AzADCurrSess | Select Account,Environment,Tenant,TenantDomain | fl
-
-    } catch {
-        Write-Warning "[!] Not authenticated to Azure AD.`n"
     }
 
-    try {
-        $mgContext = Get-MGContext
+    if ((Get-Command Get-MGContext) -and ($All -or $MGraph)) {
+        try {
+            $mgContext = Get-MGContext
 
-        Write-Host "== Microsoft Graph context (Microsoft.Graph module):"
+            Write-Host "== Microsoft Graph context (Microsoft.Graph module):"
 
-        if($CheckToken) {
-            try {
-                Get-MGOrganization -ErrorAction SilentlyContinue | Out-Null
-                Write-Host "`n[+] Token is valid on Microsoft Graph."
-            }
-            catch {
-                if($PSItem.Exception.Message -like '*Insufficient privileges to complete the operation*') {
+            if($CheckToken) {
+                try {
+                    Get-MGOrganization -ErrorAction SilentlyContinue | Out-Null
                     Write-Host "`n[+] Token is valid on Microsoft Graph."
                 }
-                else {
-                    Write-Host "`n[-] Token is invalid on Microsoft Graph."
+                catch {
+                    if($PSItem.Exception.Message -like '*Insufficient privileges to complete the operation*') {
+                        Write-Host "`n[+] Token is valid on Microsoft Graph."
+                    }
+                    else {
+                        Write-Host "`n[-] Token is invalid on Microsoft Graph."
+                    }
                 }
             }
+
+            $mgContext | Select Account,AppName,ContextScope,ClientId,TenantId,AuthType | fl
+
+        } catch {
+            Write-Warning "[!] Not authenticated to Azure AD.`n"
         }
-
-        $mgContext | Select Account,AppName,ContextScope,ClientId,TenantId,AuthType | fl
-
-    } catch {
-        Write-Warning "[!] Not authenticated to Azure AD.`n"
     }
 
-    try {
-        $AzCli = az account show | convertfrom-json
+    if($All -or $AzCli) {
+        try {
+            az account show | Out-Null
 
-        Write-Host "== AZ CLI context:"
+            try {
+                $AzAcc = az account show | convertfrom-json
 
-        $Coll = New-Object System.Collections.ArrayList
-        
-        $obj = [PSCustomObject]@{
-            Username       = $AzCli.User.Name
-            Usertype       = $AzCli.User.Type
-            TenantId       = $AzCli.tenantId
-            TenantName     = $AzCli.name
-            SubscriptionId = $AzCli.Id
-            Environment    = $AzCli.EnvironmentName
+                Write-Host "== AZ CLI context:"
+
+                $Coll = New-Object System.Collections.ArrayList
+                
+                $obj = [PSCustomObject]@{
+                    Username       = $AzAcc.User.Name
+                    Usertype       = $AzAcc.User.Type
+                    TenantId       = $AzAcc.tenantId
+                    TenantName     = $AzAcc.name
+                    SubscriptionId = $AzAcc.Id
+                    Environment    = $AzAcc.EnvironmentName
+                }
+
+                $null = $Coll.Add($obj)
+                
+                $Coll | fl
+
+            } catch {
+                Write-Warning "[!] Not authenticated to AZ CLI.`n"
+            }
         }
-
-        $null = $Coll.Add($obj)
-        
-        $Coll | fl
-
-    } catch {
-        Write-Warning "[!] Not authenticated to AZ CLI.`n"
+        catch {
+        }
     }
-
+    
     $ErrorActionPreference = $EA
 }
 
