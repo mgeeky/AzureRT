@@ -17,6 +17,9 @@
 
 Function Get-ARTWhoami {
     <#
+    .SYNOPSIS
+        Prints current authentication context
+
     .DESCRIPTION
         Pulls current context information from Az and AzureAD modules and presents them bit nicer.
 
@@ -81,6 +84,9 @@ Function Get-ARTWhoami {
 Function Parse-JWTtokenRT {
     [alias("Parse-JWTokenRT")]
     <#
+    .SYNOPSIS
+        Prints JWT token contents.
+
     .DESCRIPTION
         Parses input JWT token and prints it out nicely.
 
@@ -152,8 +158,12 @@ Function Parse-JWTtokenRT {
 
 Function Connect-ART {
     <#
+    .SYNOPSIS
+        Connects to the Azure.
+
     .DESCRIPTION
-        h
+        Invokes Connect-AzAccount to authenticate current session to the Azure Portal via provided Access Token or credentials.
+        Skips the burden of providing Tenant ID and Account ID by automatically extracting those from provided Token.
 
     .PARAMETER AccessToken
         Specifies JWT Access Token for the https://management.azure.com resource.
@@ -315,6 +325,9 @@ Function Connect-ART {
 
 Function Connect-ARTADServicePrincipal {
     <#
+    .SYNOPSIS
+        Connects to the AzureAD as a Service Principal with Certificate.
+
     .DESCRIPTION
         Invokes Connect-AzAccount to authenticate current session to the Azure Portal via provided Access Token or credentials.
         Skips the burden of providing Tenant ID and Account ID by automatically extracting those from provided Token.
@@ -437,6 +450,9 @@ Function Connect-ARTADServicePrincipal {
 
 Function Remove-ARTServicePrincipalKey {
     <#
+    .SYNOPSIS
+        Removes Service Principal Certificate that was used during authentication.
+
     .DESCRIPTION
         Performs cleanup actions after running Connect-ARTADServicePrincipal
 
@@ -500,6 +516,9 @@ Function Remove-ARTServicePrincipalKey {
 
 Function Connect-ARTAD {
     <#
+    .SYNOPSIS
+        Connects to the Azure AD.
+
     .DESCRIPTION
         Invokes Connect-AzureAD to authenticate current session to the Azure Active Directory via provided Access Token or credentials.
         Skips the burden of providing Tenant ID and Account ID by automatically extracting those from provided Token.
@@ -606,6 +625,9 @@ Function Connect-ARTAD {
 
 Function Get-ARTAccessTokenAzCli {
     <#
+    .SYNOPSIS
+        Gets access token from az cli.
+
     .DESCRIPTION
         Acquires access token from az cli, via az accound get-access-token
 
@@ -653,6 +675,9 @@ Function Get-ARTAccessTokenAzCli {
 
 Function Get-ARTAccessTokenAz {
     <#
+    .SYNOPSIS
+        Gets access token from Az module.
+
     .DESCRIPTION
         Acquires access token from Az module, via Get-AzAccessToken .
 
@@ -708,7 +733,7 @@ Function Get-ARTAccessTokenAz {
 function Get-ARTAccessTokenAzureAD {
     <#
     .SYNOPSIS
-        Gets an access token from Azure Active Directory
+        Gets an access token from Azure Active Directory via Device sign-in.
 
     .DESCRIPTION
         Gets an access token from Azure Active Directory that can be used to authenticate to for example Microsoft Graph or Azure Resource Manager.
@@ -858,6 +883,9 @@ function Get-ARTAccessTokenAzureAD {
 
 Function Get-ARTResource {
     <#
+    .SYNOPSIS
+        Displays accessible Azure Resources along with corresponding permissions user has on them.
+
     .DESCRIPTION
         Authenticates to the https://management.azure.com using provided Access Token and pulls accessible resources and permissions that token Owner have against them.
 
@@ -996,6 +1024,9 @@ Function Get-ARTResource {
 
 Function Get-ARTADRolePermissions {
     <#
+    .SYNOPSIS
+        Shows Azure AD role permissions.
+
     .DESCRIPTION
         Displays all granted permissions on a specified Azure AD role.
 
@@ -1031,6 +1062,9 @@ Function Get-ARTADRolePermissions {
 
 Function Get-ARTRolePermissions {
     <#
+    .SYNOPSIS
+        Shows Azure role permissions.
+
     .DESCRIPTION
         Displays all granted permissions on a specified Azure RBAC role.
 
@@ -1107,6 +1141,9 @@ Function Get-ARTRolePermissions {
 
 Function Invoke-ARTAutomationRunbook {
     <#
+    .SYNOPSIS
+        Invokes supplied Powershell script/command via Automation Runbook.
+
     .DESCRIPTION
         Creates an Automation Runbook under specified Automation Account and against selected Worker Group.
         That Runbook will contain Powershell commands to be executed on all the affected Azure VMs.
@@ -1260,6 +1297,9 @@ Function Invoke-ARTAutomationRunbook {
 
 Function Add-ARTUserToGroup {
     <#
+    .SYNOPSIS
+        Adds user to an Azure AD group.
+
     .DESCRIPTION
         Adds a specified Azure AD User to the specified Azure AD Group.
 
@@ -1318,6 +1358,9 @@ Function Add-ARTUserToGroup {
 
 Function Get-ARTAzRoleAssignment {
     <#
+    .SYNOPSIS
+        Displays Azure Role assignment on a currently authenticated user.
+
     .DESCRIPTION
         Displays a bit easier to read representation of assigned Azure RBAC roles to the currently used Principal.
 
@@ -1361,6 +1404,9 @@ Function Get-ARTAzRoleAssignment {
 
 Function Add-ARTUserToRole {
     <#
+    .SYNOPSIS
+        Assigns a Azure AD Role to the user.
+
     .DESCRIPTION
         Adds a specified Azure AD User to the specified Azure AD Role.
 
@@ -1420,6 +1466,9 @@ Function Add-ARTUserToRole {
 
 Function Get-ARTKeyVaultSecrets {
     <#
+    .SYNOPSIS
+        Displays all the available Key Vault secrets user can access.
+
     .DESCRIPTION
         Lists all available Azure Key Vault secrets. 
         This cmdlet assumes that requesting user connected to the Azure AD with KeyVaultAccessToken 
