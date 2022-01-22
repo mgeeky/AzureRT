@@ -61,11 +61,11 @@ PS C:\> Get-Help Connect-ART
 
 ### Authentication & Token mechanics 
 
-- **`Get-ARTWhoami`** - Displays our authentication context on Azure, AzureAD and on AZ CLI interfaces.
+- **`Get-ARTWhoami`** - Displays our authentication context on `Azure`, `AzureAD`, `Microsoft.Graph` and on `AZ CLI` interfaces.
 
 - **`Connect-ART`** - Invokes `Connect-AzAccount` to authenticate current session to the Azure Portal via provided Access Token or credentials. Skips the burden of providing Tenant ID and Account ID by automatically extracting those from provided Token.
 
-- **`Connect-ARTAD`** - Invokes `Connect-AzureAD` to authenticate current session to the Azure Active Directory via provided Access Token or credentials. Skips the burden of providing Tenant ID and Account ID by automatically extracting those from provided Token.
+- **`Connect-ARTAD`** - Invokes `Connect-AzureAD` (and optionally `Connect-MgGraph`) to authenticate current session to the Azure Active Directory via provided Access Token or credentials. Skips the burden of providing Tenant ID and Account ID by automatically extracting those from provided Token.
 
 - **`Connect-ARTADServicePrincipal`** - Invokes `Connect-AzAccount` to authenticate current session to the Azure Portal via provided Access Token or credentials. Skips the burden of providing Tenant ID and Account ID by automatically extracting those from provided Token. Then it creates self-signed PFX certificate and associates it with Service Principal for authentication. Afterwards, authenticates as that Service Principal to AzureAD and deassociates that certificate to cleanup
 
