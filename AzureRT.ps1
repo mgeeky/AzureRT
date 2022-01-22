@@ -23,9 +23,17 @@ Function Get-ARTWhoami {
     .DESCRIPTION
         Pulls current context information from Az and AzureAD modules and presents them bit nicer.
 
+    .PARAMETER CheckToken
+        When used will attempt to validate token.
+
     .EXAMPLE
         PS> Get-ARTWhoami
     #>
+    [cmdletbinding()]
+    param(
+        [Switch]
+        $CheckToken
+    )
 
     $EA = $ErrorActionPreference
     $ErrorActionPreference = 'silentlycontinue'
@@ -36,6 +44,16 @@ Function Get-ARTWhoami {
         $AzContext = Get-AzContext
         Write-Host "== Azure context:"
 
+        if($CheckToken) {
+            try {
+                Get-AzTenant -ErrorAction SilentlyContinue | Out-Null
+                Write-Host "[+] Token is valid on Azure."
+            }
+            catch {
+                Write-Host "`n[-] Token is invalid on Azure."
+            }
+        }
+        
         $AzContext | Select Name,Account,Subscription,Tenant | fl
 
     } catch {
@@ -46,8 +64,17 @@ Function Get-ARTWhoami {
         $AzADCurrSess = Get-AzureADCurrentSessionInfo
         #$AzADTenantDetail = Get-AzureADTenantDetail
 
-
         Write-Host "== Azure AD context:"
+
+        if($CheckToken) {
+            try {
+                Get-AzureADTenantDetail -ErrorAction SilentlyContinue | Out-Null
+                Write-Host "`n[+] Token is valid on Azure AD."
+            }
+            catch {
+                Write-Host "`n[-] Token is invalid on Azure AD."
+            }
+        }
 
         $AzADCurrSess | Select Account,Environment,Tenant,TenantDomain | fl
 
@@ -94,8 +121,14 @@ Function Parse-JWTtokenRT {
     .PARAMETER Token
         JWT token to parse.
 
+    .PARAMETER Json
+        Return parsed token as JSON object.
+
+    .PARAMETER ShowHeader
+        Include Header in token representation.
+
     .EXAMPLE
-        PS> Parse-JWTtokenRT -Token $token
+        PS> Parse-JWTokenRT -Token $token
     #>
 
     [cmdletbinding()]
@@ -105,10 +138,18 @@ Function Parse-JWTtokenRT {
         $Token,
 
         [Switch]
-        $Json
+        $Json,
+
+        [Switch]
+        $ShowHeader
     )
  
     try {
+        if($Token -eq $null -or $Token.Length -eq 0 ) {
+            Write-Error "Empty token."
+            Return
+        }
+
         $EA = $ErrorActionPreference
         $ErrorActionPreference = 'silentlycontinue'
 
@@ -117,6 +158,10 @@ Function Parse-JWTtokenRT {
         $tokenheader = $token.Split(".")[0].Replace('-', '+').Replace('_', '/')
      
         while ($tokenheader.Length % 4) { $tokenheader += "=" }
+
+        $tokenHdrByteArray = [System.Convert]::FromBase64String($tokenheader)
+        $tokenHdrArray = [System.Text.Encoding]::ASCII.GetString($tokenHdrByteArray)
+        $tokhdrobj = $tokenHdrArray | ConvertFrom-Json
      
         $tokenPayload = $token.Split(".")[1].Replace('-', '+').Replace('_', '/')
         while ($tokenPayload.Length % 4) { $tokenPayload += "=" }
@@ -139,6 +184,10 @@ Function Parse-JWTtokenRT {
 
         if ([bool]($tokobj.PSobject.Properties.name -match "xms_tcdt")) {
             $tokobj.xms_tcdt = Get-Date ([DateTime]('1970,1,1')).AddSeconds($tokobj.xms_tcdt)
+        }
+
+        if($ShowHeader) {
+            $tokobj.header = $tokhdrobj   
         }
 
         if($Json) {
@@ -169,6 +218,9 @@ Function Connect-ART {
     .PARAMETER AccessToken
         Specifies JWT Access Token for the https://management.azure.com resource.
 
+    .PARAMETER GraphAccessToken
+        Optional access token for Azure AD service (https://graph.microsoft.com).
+
     .PARAMETER KeyVaultAccessToken 
         Optional access token for Key Vault service (https://vault.azure.net).
 
@@ -178,8 +230,8 @@ Function Connect-ART {
     .PARAMETER TokenFromAzCli
         Use az cli to acquire fresh access token.
 
-    .PARAMETER Username
-        Specifies Azure portal username.
+    .PARAMETER Account
+        Specifies Azure portal Account name or Account ID.
 
     .PARAMETER Password
         Specifies Azure portal password.
@@ -192,10 +244,10 @@ Function Connect-ART {
         PS> Connect-ART -AccessToken 'eyJ0eXA...'
         
         Example 2: Authentication as a user to the Azure via Credentials:
-        PS> Connect-ART -Username test@test.onmicrosoft.com -Password Foobar123%
+        PS> Connect-ART -Account test@test.onmicrosoft.com -Password Foobar123%
 
         Example 3: Authentication as a Service Principal to the Azure via Credentials - Client ID and Client Secret:
-        PS> Connect-ART -ServicePrincipal -Username e5a497f0-e696-11eb-b57b-00155d01ef0d -Password 'sfs~~dsdsfssdfsdfsd' -TenantId b413826f-108d-4049-8c11-d52d5d388768
+        PS> Connect-ART -ServicePrincipal -Account e5a497f0-e696-11eb-b57b-00155d01ef0d -Password 'sfs~~dsdsfssdfsdfsd' -TenantId b413826f-108d-4049-8c11-d52d5d388768
     #>
 
     [CmdletBinding(DefaultParameterSetName = 'Token')]
@@ -203,6 +255,10 @@ Function Connect-ART {
         [Parameter(Mandatory=$False, ParameterSetName = 'Token')]
         [String]
         $AccessToken = $null,
+
+        [Parameter(Mandatory=$False, ParameterSetName = 'Token')]
+        [String]
+        $GraphAccessToken = $null,
 
         [Parameter(Mandatory=$False, ParameterSetName = 'Token')]
         [String]
@@ -216,9 +272,9 @@ Function Connect-ART {
         [Switch]
         $TokenFromAzCli,
 
-        [Parameter(Mandatory=$True, ParameterSetName = 'Credentials')]
+        [Parameter(Mandatory=$False)]
         [String]
-        $Username = $null,
+        $Account = $null,
 
         [Parameter(Mandatory=$True, ParameterSetName = 'Credentials')]
         [String]
@@ -281,25 +337,55 @@ Function Connect-ART {
                 'Authorization' = "Bearer $AccessToken"
             }
 
-            if($SubscriptionId -eq $null -or $SubscriptionId.Length -eq 0) {
-                $SubscriptionId = (Invoke-RestMethod -Uri "https://management.azure.com/subscriptions?api-version=2020-01-01" -Headers $headers).value.subscriptionId
+            $params = @{
+                'AccessToken' = $AccessToken
+                'Tenant' = $tenant
+                'AccountId' = $account
             }
 
-            if ($KeyVaultAccessToken -eq $null -or $KeyVaultAccessToken.Length -eq 0) { 
-                Write-Verbose "Connecting to Azure as Account $account ..."
-                Connect-AzAccount -AccessToken $AccessToken -Tenant $tenant -AccountId $account -SubscriptionId $SubscriptionId
+            if($SubscriptionId -eq $null -or $SubscriptionId.Length -eq 0) {
 
-            } else {
+                $SubscriptionId = (Invoke-RestMethod -Uri "https://management.azure.com/subscriptions?api-version=2020-01-01" -Headers $headers).value.subscriptionId
+                
+                if(-not ($SubscriptionId -eq $null -or $SubscriptionId.Length -eq 0)) {
+                    $params["SubscriptionId"] = $SubscriptionId
+                }
+                else {
+                    Write-Warning "Could not acquire Subscription ID! Resulting access token may be corrupted!"
+                }
+            }
+            else {
+                $params["SubscriptionId"] = $SubscriptionId
+            }
 
+            if ($KeyVaultAccessToken -ne $null -and $KeyVaultAccessToken.Length -gt 0) {
                 $parsedvault = Parse-JWTtokenRT $KeyVaultAccessToken
 
                 if(-not ($parsedvault.aud -eq 'https://vault.azure.net')) {
                     Write-Warning "Provided JWT Key Vault Access Token is not scoped to `"https://vault.azure.net`"! Instead its scope is: `"$($parsedvault.aud)`" . That will not work!"
                 }
 
-                Write-Verbose "Connecting to Azure & Azure Vault as Account $account ..."
-                Connect-AzAccount -AccessToken $AccessToken -Tenant $tenant -AccountId $account -SubscriptionId $SubscriptionId -KeyVaultAccessToken $KeyVaultAccessToken
+                $params["KeyVaultAccessToken"] = $KeyVaultAccessToken
             }
+
+            if ($GraphAccessToken -ne $null -and $GraphAccessToken.Length -gt 0) {
+                $parsedgraph = Parse-JWTtokenRT $GraphAccessToken
+
+                if(-not ($parsedgraph.aud -match 'https://graph.*')) {
+                    Write-Warning "Provided JWT Graph Access Token is not scoped to `"https://graph.*`"! Instead its scope is: `"$($parsedgraph.aud)`" . That will not work!"
+                }
+
+                $params["GraphAccessToken"] = $GraphAccessToken
+            }
+
+            $command = "Connect-AzAccount"
+
+            foreach ($h in $params.GetEnumerator()) {
+                $command += " -$($h.Name) '$($h.Value)'"
+            }
+
+            Write-Verbose "Command:`n$command`n"
+            iex $command
 
             if ($PSCmdlet.MyInvocation.BoundParameters["Verbose"].IsPresent) {
                 Parse-JWTtokenRT $AccessToken
@@ -712,6 +798,10 @@ Function Get-ARTAccessTokenAzCli {
             $token = ((az account get-access-token) | ConvertFrom-Json).accessToken
         }
 
+        if ($token -eq $null -or $token.Length -eq 0) {
+            throw "[!] Could not obtain token!"
+        }
+
         $parsed = Parse-JWTtokenRT $token
         Write-Verbose "Token for Resource: $($parsed.aud)"
 
@@ -760,6 +850,10 @@ Function Get-ARTAccessTokenAz {
         }
         else {
             $token = (Get-AzAccessToken).Token
+        }
+
+        if ($token -eq $null -or $token.Length -eq 0) {
+            throw "[!] Could not obtain token!"
         }
 
         $parsed = Parse-JWTtokenRT $token
@@ -1681,6 +1775,146 @@ Function Get-ARTADRoleAssignment {
 
         if($count -eq 0) {
             Write-Host "[-] No Azure AD Role assignment found.`n"
+        }
+    }
+    catch {
+        Write-Host "[!] Function failed!"
+        Throw
+        Return
+    }
+    finally {
+        $ErrorActionPreference = $EA
+    }
+}
+
+
+Function Get-ARTAccess {
+    <#
+    .SYNOPSIS
+        Performs Azure Situational Awareness.
+
+    .DESCRIPTION
+        Enumerate all accessible Azure resources, permissions, roles assigned for a quick Situational Awareness.
+
+    .EXAMPLE
+        PS> Get-ARTAccess -Verbose
+    #>
+    [CmdletBinding()]
+    Param(
+    )
+
+    try {
+        $EA = $ErrorActionPreference
+        $ErrorActionPreference = 'silentlycontinue'
+
+        try {
+            $res = Get-AzResource
+            $res = Get-ARTResource
+
+            if ($res -ne $null -and $res.Length -gt 0) {
+                Write-Host "[+] Accessible Azure Resources & corresponding permissions:"
+                $res
+            }
+            else {
+                Write-Host "[-] User does not have access to any Azure Resource."
+            }
+
+            try {
+                $roles = Get-ARTRoleAssignment
+                if ($roles -ne $null -and $roles.Length -gt 0) {
+                    Write-Host "[+] Azure RBAC Roles Assigned:"
+                    $roles | ft
+                }
+                else {
+                    Write-Host "[-] User does not have any Azure RBAC Role assigned."
+                }
+            }
+            catch {
+                Write-Host "[-] User does not have any Azure RBAC Role assigned."
+            }
+
+            try {
+                $secrets = Get-ARTKeyVaultSecrets
+
+                if ($secrets -ne $null -and $secrets.Length -gt 0) {
+                    Write-Host "[+] Azure Key Vault Secrets accessible:"
+                    $secrets
+                }
+            }
+            catch {
+            }
+
+            try {
+                $users = Get-AzADUser -ErrorAction SilentlyContinue
+
+                if ($users -ne $null -and $users.Length -gt 0) {
+                    Write-Host "[+] User has access to Azure AD via Az.AD module (e.g. Get-AzADUser)."
+                }
+            }
+            catch {
+            }
+        }
+        catch {
+            Write-Host "[-] Current User context does not have access to Azure management.`n"
+            
+            if ($PSCmdlet.MyInvocation.BoundParameters["Verbose"].IsPresent) {
+                throw
+            }
+        }
+    }
+    catch {
+        Write-Host "[!] Function failed!"
+        Throw
+        Return
+    }
+    finally {
+        $ErrorActionPreference = $EA
+    }
+}
+
+
+Function Get-ARTADAccess {
+    <#
+    .SYNOPSIS
+        Performs Azure AD Situational Awareness.
+
+    .DESCRIPTION
+        Enumerate all Azure AD permissions, roles assigned for a quick Situational Awareness.
+
+    .EXAMPLE
+        PS> Get-ARTADAccess -Verbose
+    #>
+    [CmdletBinding()]
+    Param(
+    )
+
+    try {
+        $EA = $ErrorActionPreference
+        $ErrorActionPreference = 'silentlycontinue'
+
+        try {
+            $users = Get-AzureADUser
+
+            if ($users -eq $null -or $users.Length -eq 0) {
+                Write-Host "[-] User does not have access to Azure AD."
+                Return
+            }
+            
+            $roles = Get-ARTADRoleAssignment
+            if ($roles -ne $null -and $roles.Length -gt 0) {
+                Write-Host "[+] Azure AD Roles Assigned:"
+                $roles | ft
+            }
+            else {
+                Write-Host "[-] User does not have any Azure AD Roles assigned."
+            }
+        }
+        catch {
+            Write-Host "[-] Current User context does not have access to Azure AD.`n"
+            
+            if ($PSCmdlet.MyInvocation.BoundParameters["Verbose"].IsPresent) {
+                throw
+            }
         }
     }
     catch {

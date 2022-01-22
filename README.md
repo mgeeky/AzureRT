@@ -30,6 +30,7 @@ Before one starts crafting around Azure, following commands may be used to prepa
 ```
 Install-Module Az -Force -Confirm -AllowClobber
 Install-Module AzureAD -Force -Confirm -AllowClobber
+Install-Module Microsoft.Graph -Force -Confirm -AllowClobber
 Install-Module MSOnline -Force -Confirm -AllowClobber
 Install-Module AzureADPreview -Force -Confirm -AllowClobber
 ```
@@ -80,6 +81,10 @@ PS C:\> Get-Help Connect-ART
 
 
 ### Recon & Situational Awareness
+
+- **`Get-ARTAccess`** - Performs Azure Situational Awareness.
+
+- **`Get-ARTADAccess`** - Performs Azure AD Situational Awareness.
 
 - **`Get-ARTResource`** - Authenticates to the https://management.azure.com using provided Access Token and pulls accessible resources and permissions that token Owner have against them.
 
