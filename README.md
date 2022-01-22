@@ -11,7 +11,7 @@ Helpful utilities dealing with access token based authentication, easily switchi
 Cmdlets implemented in this module came helpful in following use & attack scenarios:
 
 - Juggling with access tokens from `Az` to `AzureAD` and back again.
-- Nicely print authentication context (aka _whoami_) in `Az`,  `AzureAD` and `az cli` at the same time
+- Nicely print authentication context (aka _whoami_) in `Az`,  `AzureAD`, `Microsoft.Graph` and `az cli` at the same time
 - Display available permissions granted to the user on a target Azure VM
 - Display accessible Azure Resources along with permissions we have against them
 - Easily read all accessible _Azure Key Vault_ secrets
@@ -75,8 +75,6 @@ PS C:\> Get-Help Connect-ART
 
 - **`Get-ARTAccessTokenAzureAD`** - Gets an access token from Azure Active Directory. Authored by [Simon Wahlin, @SimonWahlin ](https://blog.simonw.se/getting-an-access-token-for-azuread-using-powershell-and-device-login-flow/)
 
-- **`Parse-JWTtokenRT`** - Parses input JWT token and prints it out nicely.
-
 - **`Remove-ARTServicePrincipalKey`** - Performs cleanup actions after running `Connect-ARTADServicePrincipal`
 
 
@@ -98,8 +96,6 @@ PS C:\> Get-Help Connect-ART
 
 - **`Get-ARTKeyVaultSecrets`** - Lists all available Azure Key Vault secrets. This cmdlet assumes that requesting user connected to the Azure AD with KeyVaultAccessToken (scoped to https://vault.azure.net) and has "Key Vault Secrets User" role assigned (or equivalent).
 
-- **`Get-ARTUserId`** - Acquires current user or user specified in parameter ObjectId
-
 
 
 ### Privilege Escalation
@@ -112,6 +108,15 @@ PS C:\> Get-Help Connect-ART
 ### Lateral Movement
 
 - **`Invoke-ARTAutomationRunbook`** - Creates an Automation Runbook under specified Automation Account and against selected Worker Group. That Runbook will contain Powershell commands to be executed on all the affected Azure VMs.
+
+
+### Misc
+
+- **`Get-ARTUserId`** - Acquires current user or user specified in parameter ObjectId via `Az` module
+
+- **`Parse-JWTtokenRT`** - Parses input JWT token and prints it out nicely.
+
+- **`Invoke-ARTRESTMethod`** - Takes Access Token and invokes REST method API request against a specified URI. It also verifies whether provided token has required audience set.
 
 
 ---
