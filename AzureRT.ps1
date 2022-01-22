@@ -4,6 +4,10 @@
 # Set of useful cmdlets used to collect reconnessaince data, query Azure, Azure AD or Office365 for valuable intelligence and perform various offensive
 # activities using solely JWT Access Token or by interacting with related Powershell modules (Az, AzureAD, AzureADPreview) as well as AZ CLI.
 #
+# Requirements:
+#   Az
+#   AzureAD
+#
 # Author: 
 #  Mariusz Banach / mgeeky, '22
 #  <mb [at] binary-offensive.com>    
@@ -70,8 +74,7 @@ function Parse-JWTtokenRT {
 Function Connect-ART {
     <#
     .DESCRIPTION
-        Invokes Connect-AzAccount to authenticate current session to the Azure Portal via provided Access Token or credentials.
-        Skips the burden of providing Tenant ID and Account ID by automatically extracting those from provided Token.
+        h
 
     .PARAMETER AccessToken
         Specifies JWT Access Token for the https://management.azure.com resource.
