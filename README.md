@@ -5,8 +5,33 @@ Helpful utilities dealing with access token based authentication, easily switchi
 
 ---
 
+## Installation
+
+This module depends on Powershell `Az` and `AzureAD` modules pre-installed. `az cli` is optional and not required. 
+Before one starts crafting around Azure, following commands may be used to prepare one's offensive environment:
+
+```
+Install-Module Az -Force -Confirm -AllowClobber
+Install-Module AzureAD -Force -Confirm -AllowClobber
+Install-Module MSOnline -Force -Confirm -AllowClobber
+Install-Module AzureADPreview -Force -Confirm -AllowClobber
+```
+
+Even though only first two modules are required by `AzureRT`, its good to have others pre-installed too.
+
+Then to load this module, one simply types:
+
+```
+PS> . .\AzureRT.ps1
+```
+
+---
+
 ## Batteries Included
 
+The module will be gradually receiving next tools and utilities, naturally categorised onto subsequent kill chain phases. 
+
+Currently, following batteries are included:
 
 ### Authentication & Token mechanics 
 
