@@ -63,11 +63,12 @@ Function Get-ARTWhoami {
         $Coll = New-Object System.Collections.ArrayList
         
         $obj = [PSCustomObject]@{
-            Username    = $AzCli.User.Name
-            Usertype    = $AzCli.User.Type
-            TenantId    = $AzCli.tenantId
-            TenantName  = $AzCli.name
-            Environment = $AzCli.EnvironmentName
+            Username       = $AzCli.User.Name
+            Usertype       = $AzCli.User.Type
+            TenantId       = $AzCli.tenantId
+            TenantName     = $AzCli.name
+            SubscriptionId = $AzCli.Id
+            Environment    = $AzCli.EnvironmentName
         }
 
         $null = $Coll.Add($obj)
@@ -287,6 +288,7 @@ Function Connect-ART {
             if ($KeyVaultAccessToken -eq $null -or $KeyVaultAccessToken.Length -eq 0) { 
                 Write-Verbose "Connecting to Azure as Account $account ..."
                 Connect-AzAccount -AccessToken $AccessToken -Tenant $tenant -AccountId $account -SubscriptionId $SubscriptionId
+
             } else {
 
                 $parsedvault = Parse-JWTtokenRT $KeyVaultAccessToken
@@ -297,6 +299,10 @@ Function Connect-ART {
 
                 Write-Verbose "Connecting to Azure & Azure Vault as Account $account ..."
                 Connect-AzAccount -AccessToken $AccessToken -Tenant $tenant -AccountId $account -SubscriptionId $SubscriptionId -KeyVaultAccessToken $KeyVaultAccessToken
+            }
+
+            if ($PSCmdlet.MyInvocation.BoundParameters["Verbose"].IsPresent) {
+                Parse-JWTtokenRT $AccessToken
             }
         }
         else {
@@ -316,6 +322,50 @@ Function Connect-ART {
         Write-Host "[!] Function failed!"
         Throw
         Return
+    }
+    finally {
+        $ErrorActionPreference = $EA
+    }
+}
+
+Function Get-ARTUserId {
+    <#
+    .SYNOPSIS
+        Gets current or specified user ObjectId.
+
+    .DESCRIPTION
+        Acquires current user or user specified in parameter ObjectId
+
+    .PARAMETER Username
+        Specifies Username/UserPrincipalName/email to use during ObjectId lookup.
+
+    .EXAMPLE
+        PS> Get-ARTUserId
+    #>
+    [CmdletBinding()]
+    Param(
+        [Parameter(Mandatory=$False)]
+        [String]
+        $Username
+    )
+
+    try {
+        $EA = $ErrorActionPreference
+        $ErrorActionPreference = 'silentlycontinue'
+
+        $name = (Get-AzureADCurrentSessionInfo).Account
+
+        if($Username -ne $null -and $Username.Length -gt 0) {
+            $name = $Username
+        }
+
+        $UserId = (Get-AzureADUser -SearchString $name).ObjectId
+        Return $UserId
+    }
+    catch {
+        Write-Host "[!] Function failed!"
+        Throw
+        Return $null
     }
     finally {
         $ErrorActionPreference = $EA
@@ -377,7 +427,7 @@ Function Connect-ARTADServicePrincipal {
             Return
         }
 
-        $UserId = (Get-AzureADUser -Filter "UserPrincipalName eq '$((Get-AzureADCurrentSessionInfo).Account)'").ObjectId
+        $UserId = Get-ARTUserId
 
         $pwd = ConvertTo-SecureString -String $certpwd -Force -AsPlainText
         $cert = Get-ChildItem -Path $certStorePath | where { $_.subject -eq "CN=$certDnsName" } 
@@ -603,6 +653,10 @@ Function Connect-ARTAD {
             }
 
             Connect-AzureAD -AadAccessToken $AccessToken -TenantId $tenant -AccountId $account
+
+            if ($PSCmdlet.MyInvocation.BoundParameters["Verbose"].IsPresent) {
+                Parse-JWTtokenRT $AccessToken
+            }
         }
         else {
             $passwd = ConvertTo-SecureString $Password -AsPlainText -Force
@@ -1356,7 +1410,7 @@ Function Add-ARTUserToGroup {
     }
 }
 
-Function Get-ARTAzRoleAssignment {
+Function Get-ARTRoleAssignment {
     <#
     .SYNOPSIS
         Displays Azure Role assignment on a currently authenticated user.
@@ -1365,7 +1419,7 @@ Function Get-ARTAzRoleAssignment {
         Displays a bit easier to read representation of assigned Azure RBAC roles to the currently used Principal.
 
     .EXAMPLE
-        PS> Get-ARTAzRoleAssignment | Format-Table
+        PS> Get-ARTRoleAssignment | Format-Table
     #>
 
     try {
@@ -1373,6 +1427,53 @@ Function Get-ARTAzRoleAssignment {
         $ErrorActionPreference = 'silentlycontinue'
 
         $roles = Get-AzRoleAssignment
+        $Coll = New-Object System.Collections.ArrayList
+        $roles | % {
+            $parts = $_.Scope.Split('/')
+            $scope = $parts[6..$parts.Length] -join '/'
+
+            $obj = [PSCustomObject]@{
+                RoleDefinitionName= $_.RoleDefinitionName
+                Resource          = $scope
+                ResourceGroup     = $parts[4]
+                ObjectType        = $_.ObjectType
+                CanDelegate       = $_.CanDelegate
+                Scope             = $_.Scope
+            }
+
+            $null = $Coll.Add($obj)
+        }
+
+        $Coll
+    }
+    catch {
+        Write-Host "[!] Function failed!"
+        Throw
+        Return
+    }
+    finally {
+        $ErrorActionPreference = $EA
+    }
+}
+
+
+Function Get-ARTADRoleAssignment {
+    <#
+    .SYNOPSIS
+        Displays Azure AD Role assignment on a currently authenticated user.
+
+    .DESCRIPTION
+        Displays a bit easier to read representation of assigned Azure AD roles to the currently used Principal.
+
+    .EXAMPLE
+        PS> Get-ARTADRoleAssignment | Format-Table
+    #>
+
+    try {
+        $EA = $ErrorActionPreference
+        $ErrorActionPreference = 'silentlycontinue'
+
+        $roles = Get-AzureADDirectoryRoleAssignment
         $Coll = New-Object System.Collections.ArrayList
         $roles | % {
             $parts = $_.Scope.Split('/')
@@ -1506,6 +1607,81 @@ Function Get-ARTKeyVaultSecrets {
         }
 
         $Coll
+    }
+    catch {
+        Write-Host "[!] Function failed!"
+        Throw
+        Return
+    }
+    finally {
+        $ErrorActionPreference = $EA
+    }
+}
+
+
+Function Get-ARTADRoleAssignment {
+    <#
+    .SYNOPSIS
+        Displays Azure AD Role assignment.
+
+    .DESCRIPTION
+        Displays Azure AD Role assignments on a current user or on all Azure AD users.
+
+    .PARAMETER All
+        Display all Azure AD role assignments
+
+    .EXAMPLE
+        Example 1: Get current user Azure AD Role Assignment
+        PS> Get-ARTADRoleAssignment
+
+        Example 2: Get all users Azure AD Role Assignments
+        PS> Get-ARTADRoleAssignment -All
+    #>
+
+    [CmdletBinding()]
+    Param(
+        [Parameter(Mandatory=$False)]
+        [Switch]
+        $All
+    )
+
+    try {
+        $EA = $ErrorActionPreference
+        $ErrorActionPreference = 'silentlycontinue'
+
+        $Coll = New-Object System.Collections.ArrayList
+        $UserId = Get-ARTUserId
+        $count = 0
+        
+        Get-AzureADDirectoryRole | % { 
+            Write-Verbose "Enumerating role `"$($_.DisplayName)`" ..."
+            $members = Get-AzureADDirectoryRoleMember -ObjectId $_.ObjectId
+            
+            $RoleName = $_.DisplayName
+            $RoleId = $_.ObjectId
+
+            $members | % { 
+                $obj = [PSCustomObject]@{
+                    DisplayName      = $_.DisplayName
+                    AssignedRoleName = $RoleName
+                    ObjectType       = $_.ObjectType
+                    AccountEnabled   = $_.AccountEnabled
+                    ObjectId         = $_.ObjectId
+                    AssignedRoleId   = $RoleId
+                }
+
+                if ($All -or $_.ObjectId -eq $UserId) {
+                    $null = $Coll.Add($obj)
+                    $count += 1
+                }
+            }
+        }
+
+        $Coll
+
+        if($count -eq 0) {
+            Write-Host "[-] No Azure AD Role assignment found.`n"
+        }
     }
     catch {
         Write-Host "[!] Function failed!"

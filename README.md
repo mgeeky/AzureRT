@@ -83,13 +83,18 @@ PS C:\> Get-Help Connect-ART
 
 - **`Get-ARTResource`** - Authenticates to the https://management.azure.com using provided Access Token and pulls accessible resources and permissions that token Owner have against them.
 
+- **`Get-ARTRoleAssignment`** - Displays a bit easier to read representation of assigned Azure RBAC roles to the currently used Principal.
+
+- **`Get-ARTADRoleAssignment`** - Displays Azure AD Role assignments on a current user or on all Azure AD users.
+
 - **`Get-ARTRolePermissions`** - Displays all granted permissions on a specified Azure RBAC role.
 
 - **`Get-ARTADRolePermissions`** - Displays all granted permissions on a specified Azure AD role.
 
-- **`Get-ARTAzRoleAssignment`** - Displays a bit easier to read representation of assigned Azure RBAC roles to the currently used Principal.
-
 - **`Get-ARTKeyVaultSecrets`** - Lists all available Azure Key Vault secrets. This cmdlet assumes that requesting user connected to the Azure AD with KeyVaultAccessToken (scoped to https://vault.azure.net) and has "Key Vault Secrets User" role assigned (or equivalent).
+
+- **`Get-ARTUserId`** - Acquires current user or user specified in parameter ObjectId
+
 
 
 ### Privilege Escalation
