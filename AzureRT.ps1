@@ -82,30 +82,30 @@ Function Get-ARTWhoami {
 
     if((Get-Command Get-AzContext) -and ($All -or $Az)) {
         
-        Write-Host "== Azure context (Az module):"
+        Write-Host "== Azure context (Az module):" -ForegroundColor Yellow
         try {
             $AzContext = Get-AzContext
 
             if($CheckToken) {
                 try {
                     Get-AzTenant -ErrorAction SilentlyContinue | Out-Null
-                    Write-Host "`n[+] Token is valid on Azure."
+                    Write-Host "`n[+] Token is valid on Azure." -ForegroundColor Green
                 }
                 catch {
-                    Write-Host "`n[-] Token is invalid on Azure."
+                    Write-Host "`n[-] Token is invalid on Azure." -ForegroundColor Red
                 }
             }
             
             $AzContext | Select Name,Account,Subscription,Tenant | fl
 
         } catch {
-            Write-Warning "[!] Not authenticated to Azure.`n"
+            Write-Host "[!] Not authenticated to Azure.`n" -ForegroundColor Red
             Write-Host ""
         }
     }
 
     if((Get-Command Get-AzureADCurrentSessionInfo) -and ($All -or $AzureAD)) {
-        Write-Host "== Azure AD context (AzureAD module):"
+        Write-Host "== Azure AD context (AzureAD module):" -ForegroundColor Yellow
         
         try {
             $AzADCurrSess = Get-AzureADCurrentSessionInfo
@@ -113,23 +113,23 @@ Function Get-ARTWhoami {
             if($CheckToken) {
                 try {
                     Get-AzureADTenantDetail -ErrorAction SilentlyContinue | Out-Null
-                    Write-Host "`n[+] Token is valid on Azure AD."
+                    Write-Host "`n[+] Token is valid on Azure AD." -ForegroundColor Green
                 }
                 catch {
-                    Write-Host "`n[-] Token is invalid on Azure AD."
+                    Write-Host "`n[-] Token is invalid on Azure AD." -ForegroundColor Red
                 }
             }
 
             $AzADCurrSess | Select Account,Environment,Tenant,TenantDomain | fl
 
         } catch {
-            Write-Warning "[!] Not authenticated to Azure AD.`n"
+            Write-Host "[!] Not authenticated to Azure AD.`n" -ForegroundColor Red
             Write-Host ""
         }
     }
 
     if ((Get-Command Get-MGContext) -and ($All -or $MGraph)) {
-        Write-Host "== Microsoft Graph context (Microsoft.Graph module):"
+        Write-Host "== Microsoft Graph context (Microsoft.Graph module):" -ForegroundColor Yellow
         
         try {
             $mgContext = Get-MGContext
@@ -137,14 +137,14 @@ Function Get-ARTWhoami {
             if($CheckToken) {
                 try {
                     Get-MGOrganization -ErrorAction SilentlyContinue | Out-Null
-                    Write-Host "`n[+] Token is valid on Microsoft Graph."
+                    Write-Host "`n[+] Token is valid on Microsoft Graph." -ForegroundColor Green
                 }
                 catch {
                     if($PSItem.Exception.Message -like '*Insufficient privileges to complete the operation*') {
-                        Write-Host "`n[+] Token is valid on Microsoft Graph."
+                        Write-Host "`n[+] Token is valid on Microsoft Graph." -ForegroundColor Green
                     }
                     else {
-                        Write-Host "`n[-] Token is invalid on Microsoft Graph."
+                        Write-Host "`n[-] Token is invalid on Microsoft Graph." -ForegroundColor Red
                     }
                 }
             }
@@ -152,13 +152,13 @@ Function Get-ARTWhoami {
             $mgContext | Select Account,AppName,ContextScope,ClientId,TenantId,AuthType | fl
 
         } catch {
-            Write-Warning "[!] Not authenticated to Azure AD.`n"
+            Write-Host "[!] Not authenticated to Azure AD.`n" -ForegroundColor Red
             Write-Host ""
         }
     }
 
     if($All -or $AzCli) {
-        Write-Host "== AZ CLI context:"
+        Write-Host "== AZ CLI context:" -ForegroundColor Yellow
         
         try {
             az account show | Out-Null
@@ -182,7 +182,7 @@ Function Get-ARTWhoami {
                 $Coll | fl
 
             } catch {
-                Write-Warning "[!] Not authenticated to AZ CLI.`n"
+                Write-Host "[!] Not authenticated to AZ CLI.`n" -ForegroundColor Red
                 Write-Host ""
             }
         }
@@ -281,7 +281,7 @@ Function Parse-JWTtokenRT {
         return $tokobj
     }
     catch {
-        Write-Host "[!] Function failed!"
+        Write-Host "[!] Function failed!" -ForegroundColor Red
         Throw
         Return
     }
@@ -496,7 +496,7 @@ Function Connect-ART {
         }
     }
     catch {
-        Write-Host "[!] Function failed!"
+        Write-Host "[!] Function failed!" -ForegroundColor Red
         Throw
         Return
     }
@@ -540,7 +540,7 @@ Function Get-ARTUserId {
         Return $UserId
     }
     catch {
-        Write-Host "[!] Function failed!"
+        Write-Host "[!] Function failed!" -ForegroundColor Red
         Throw
         Return $null
     }
@@ -666,7 +666,7 @@ Function Connect-ARTADServicePrincipal {
         Get-AzureADCurrentSessionInfo
     }
     catch {
-        Write-Host "[!] Function failed!"
+        Write-Host "[!] Function failed!" -ForegroundColor Red
         Throw
         Return
     }
@@ -731,7 +731,7 @@ Function Remove-ARTServicePrincipalKey {
         Write-Host "[+] Cleanup finished."
     }
     catch {
-        Write-Host "[!] Function failed!"
+        Write-Host "[!] Function failed!" -ForegroundColor Red
         Throw
         Return
     }
@@ -852,7 +852,7 @@ Function Connect-ARTAD {
         }
     }
     catch {
-        Write-Host "[!] Function failed!"
+        Write-Host "[!] Function failed!" -ForegroundColor Red
         Throw
         Return
     }
@@ -907,7 +907,7 @@ Function Get-ARTAccessTokenAzCli {
         Return $token
     }
     catch {
-        Write-Host "[!] Function failed!"
+        Write-Host "[!] Function failed!" -ForegroundColor Red
         Throw
         Return
     }
@@ -944,7 +944,10 @@ Function Get-ARTAccessTokenAz {
 
         $token = $null
 
-        if($Resource -ne $null -and $Resource.Length -gt 0) {
+        if ($Resource -eq "https://management.azure.com" -or $Resource -eq "https://management.core.windows.net") {
+            $token = (Get-AzAccessToken).Token
+        }
+        elseif($Resource -ne $null -and $Resource.Length -gt 0 ) {
             $token = (Get-AzAccessToken -Resource $Resource).Token
 
             if ($token -eq $null -or $token.Length -eq 0) {
@@ -966,7 +969,7 @@ Function Get-ARTAccessTokenAz {
         Return $token
     }
     catch {
-        Write-Host "[!] Function failed!"
+        Write-Host "[!] Function failed!" -ForegroundColor Red
         Throw
         Return
     }
@@ -1171,9 +1174,11 @@ Function Get-ARTResource {
         $EA = $ErrorActionPreference
         $ErrorActionPreference = 'silentlycontinue'
 
+        $resource = "https://management.azure.com"
+
         if ($AccessToken -eq $null -or $AccessToken -eq ""){ 
             Write-Verbose "Access Token not provided. Requesting one from Get-AzAccessToken ..."
-            $AccessToken = Get-ARTAccessTokenAz -Resource "https://management.azure.com"
+            $AccessToken = Get-ARTAccessTokenAz -Resource $resource
         }
 
         if ($AccessToken -eq $null -or $AccessToken -eq ""){ 
@@ -1192,7 +1197,6 @@ Function Get-ARTResource {
         }
 
         #$resource = $parsed.aud
-        $resource = "https://management.azure.com"
 
         Write-Verbose "Will use resource: $resource"
 
@@ -1267,7 +1271,7 @@ Function Get-ARTResource {
         }
     }
     catch {
-        Write-Host "[!] Function failed!"
+        Write-Host "[!] Function failed!" -ForegroundColor Red
         Throw
         Return
     }
@@ -1305,7 +1309,7 @@ Function Get-ARTADRolePermissions {
         (Get-AzureADMSRoleDefinition -Filter "displayName eq '$RoleName'").RolePermissions | select -Expand AllowedResourceActions | Format-List
     }
     catch {
-        Write-Host "[!] Function failed!"
+        Write-Host "[!] Function failed!" -ForegroundColor Red
         Throw
         Return
     }
@@ -1383,7 +1387,7 @@ Function Get-ARTRolePermissions {
         Write-Host ""
     }
     catch {
-        Write-Host "[!] Function failed!"
+        Write-Host "[!] Function failed!" -ForegroundColor Red
         Throw
         Return
     }
@@ -1539,7 +1543,7 @@ Function Invoke-ARTAutomationRunbook {
         Write-Host "Attack finished."
     }
     catch {
-        Write-Host "[!] Function failed!"
+        Write-Host "[!] Function failed!" -ForegroundColor Red
         Throw
         Return
     }
@@ -1601,7 +1605,7 @@ Function Add-ARTUserToGroup {
         Write-Host "[+] Added user $($User.DisplayName) to Azure AD Group $($Group.DisplayName) ($($Group.ObjectId))"
     }
     catch {
-        Write-Host "[!] Function failed!"
+        Write-Host "[!] Function failed!" -ForegroundColor Red
         Throw
         Return
     }
@@ -1647,7 +1651,7 @@ Function Get-ARTRoleAssignment {
         $Coll
     }
     catch {
-        Write-Host "[!] Function failed!"
+        Write-Host "[!] Function failed!" -ForegroundColor Red
         Throw
         Return
     }
@@ -1694,7 +1698,7 @@ Function Get-ARTADRoleAssignment {
         $Coll
     }
     catch {
-        Write-Host "[!] Function failed!"
+        Write-Host "[!] Function failed!" -ForegroundColor Red
         Throw
         Return
     }
@@ -1755,7 +1759,7 @@ Function Add-ARTUserToRole {
         Write-Host "[+] Added user $($User.DisplayName) to Azure AD Role $($Role.DisplayName) ($($Role.ObjectId))"
     }
     catch {
-        Write-Host "[!] Function failed!"
+        Write-Host "[!] Function failed!" -ForegroundColor Red
         Throw
         Return
     }
@@ -1812,7 +1816,7 @@ Function Get-ARTKeyVaultSecrets {
         Return $Coll
     }
     catch {
-        Write-Host "[!] Function failed!"
+        Write-Host "[!] Function failed!" -ForegroundColor Red
         Throw
         Return
     }
@@ -1883,11 +1887,11 @@ Function Get-ARTADRoleAssignment {
         $Coll
 
         if($count -eq 0) {
-            Write-Host "[-] No Azure AD Role assignment found.`n"
+            Write-Host "[-] No Azure AD Role assignment found.`n" -ForegroundColor Red
         }
     }
     catch {
-        Write-Host "[!] Function failed!"
+        Write-Host "[!] Function failed!" -ForegroundColor Red
         Throw
         Return
     }
@@ -1920,59 +1924,111 @@ Function Get-ARTAccess {
             $res = Get-AzResource
 
             Write-Verbose "Step 1. Checking accessible Azure Resources..."
+
+            Write-Host "`n== Accessible Azure Resources:`n" -ForegroundColor Yellow
             $res = Get-ARTResource
 
             if ($res -ne $null -and $res.Length -gt 0) {
-                Write-Host "[+] Accessible Azure Resources & corresponding permissions:"
+                Write-Host "[+] Accessible Azure Resources & corresponding permissions:" -ForegroundColor Green
                 $res
             }
             else {
-                Write-Host "[-] User does not have access to any Azure Resource."
+                Write-Host "[-] User does not have access to any Azure Resource." -ForegroundColor Red
             }
 
             try {
                 Write-Verbose "Step 2. Checking assigned Azure RBAC Roles..."
+                Write-Host "`n== Assigned Azure RBAC Roles:`n" -ForegroundColor Yellow
+
                 $roles = Get-ARTRoleAssignment
                 if ($roles -ne $null -and $roles.Length -gt 0) {
-                    Write-Host "[+] Azure RBAC Roles Assigned:"
+                    Write-Host "[+] Azure RBAC Roles Assigned:" -ForegroundColor Green
                     $roles | ft
                 }
                 else {
-                    Write-Host "[-] User does not have any Azure RBAC Role assigned."
+                    Write-Host "[-] User does not have any Azure RBAC Role assigned." -ForegroundColor Red
                 }
             }
             catch {
-                Write-Host "[-] User does not have any Azure RBAC Role assigned."
+                Write-Host "[-] User does not have any Azure RBAC Role assigned." -ForegroundColor Red
             }
 
             try {
                 Write-Verbose "Step 3. Checking accessible Azure Key Vault Secrets..."
+                Write-Host "`n== Accessible Azure Key Vault Secrets:`n" -ForegroundColor Yellow
                 $secrets = Get-ARTKeyVaultSecrets
 
                 if ($secrets -ne $null) {
-                    Write-Host "[+] Azure Key Vault Secrets accessible:"
+                    Write-Host "[+] Azure Key Vault Secrets accessible:" -ForegroundColor Green
                     $secrets
                 }
                 else {
-                    Write-Verbose "[-] User could not access Key Vault Secrets or there were no available."
+                    Write-Host "[-] User could not access Key Vault Secrets or there were no available." -ForegroundColor Red
                 }
             }
             catch {
+                Write-Host "[-] User could not access Key Vault Secrets or there were no available." -ForegroundColor Red
             }
 
             try {
                 Write-Verbose "Step 4. Checking access to Az.AD / AzureAD via Az module..."
+                Write-Host "`n== User Access to Az.AD:`n" -ForegroundColor Yellow
                 $users = Get-AzADUser -ErrorAction SilentlyContinue
 
                 if ($users -ne $null -and $users.Length -gt 0) {
-                    Write-Host "[+] User has access to Azure AD via Az.AD module (e.g. Get-AzADUser)."
+                    Write-Host "[+] User has access to Azure AD via Az.AD module (e.g. Get-AzADUser)." -ForegroundColor Green
+                }
+                else {
+                    Write-Host "[-] User has no access to Azure AD via Az.AD module (e.g. Get-AzADUser)." -ForegroundColor Red
                 }
             }
             catch {
+                Write-Host "[-] User has no access to Azure AD via Az.AD module (e.g. Get-AzADUser)." -ForegroundColor Red
+            }
+
+            try {
+                Write-Verbose "Step 5. Enumerating resource group deployments..."
+                Write-Host "`n== Resource Group Deployments:`n" -ForegroundColor Yellow
+
+                $resourcegroups = Get-AzResourceGroup
+
+                if($resourcegroups -eq $null -or $resourcegroups.Length -eq 0) {
+                    Write-Host "[-] No resource groups available to the user." -ForegroundColor Red
+                }
+                else {
+                    $Coll = New-Object System.Collections.ArrayList
+        
+                    $resourcegroups | % {
+                        $deployments = Get-AzResourceGroupDeployment -ResourceGroupName $_.ResourceGroupName -ErrorAction SilentlyContinue
+
+                        $deployments | % {
+                            $obj = [PSCustomObject]@{
+                                ResourceGroupName  = $_.ResourceGroupName
+                                DeploymentName     = $_.DeploymentName
+                                Outputs            = $_.Outputs
+                                Parameters         = $_.Parameters
+                            }
+
+                            $null = $Coll.Add($obj)
+                        }
+                    }
+
+                    if ($Coll -ne $null) {
+                        Write-Host "[+] Following Resource Group Deployments are available to the User:" -ForegroundColor Green
+
+                        $Coll | fl *
+                    }
+                    else {
+                        Write-Host "[-] User has no access to Resource Group Deployments or there were no defined." -ForegroundColor Red
+                    }
+                }
+            }
+            catch {
+                Write-Host "[-] User has no access to Resource Group Deployments or there were no defined." -ForegroundColor Red
             }
         }
         catch {
-            Write-Host "[-] Current User context does not have access to Azure management.`n"
+            Write-Host "[-] Current User context does not have access to Azure management.`n" -ForegroundColor Red
             
             if ($PSCmdlet.MyInvocation.BoundParameters["Verbose"].IsPresent) {
                 throw
@@ -1980,7 +2036,7 @@ Function Get-ARTAccess {
         }
     }
     catch {
-        Write-Host "[!] Function failed!"
+        Write-Host "[!] Function failed!" -ForegroundColor Red
         Throw
         Return
     }
@@ -2013,38 +2069,39 @@ Function Get-ARTADAccess {
             $users = Get-AzureADUser
 
             if ($users -eq $null -or $users.Length -eq 0) {
-                Write-Host "[-] User does not have access to Azure AD."
+                Write-Host "[-] User does not have access to Azure AD." -ForegroundColor Red
                 Return
             }
             
             Write-Verbose "Step 1. Checking assigned Azure AD Roles..."
+            Write-Host "`n== Azure AD Roles Assignment:`n" -ForegroundColor Yellow
             $roles = Get-ARTADRoleAssignment
 
             if ($roles -ne $null -and $roles.Length -gt 0) {
-                Write-Host "[+] Azure AD Roles Assigned:"
+                Write-Host "[+] Azure AD Roles Assigned:" -ForegroundColor Green
                 $roles | ft
             }
             else {
-                Write-Host "[-] User does not have any Azure AD Roles assigned."
+                Write-Host "[-] User does not have any Azure AD Roles assigned." -ForegroundColor Red
 
                 if(Get-Command Get-MGContext) {
                     $users = Get-MgUser
 
                     if ($users -eq $null -or $users.Length -eq 0) {
-                        Write-Host "[-] User does not have access to Microsoft.Graph either."
+                        Write-Host "[-] User does not have access to Microsoft.Graph either." -ForegroundColor Red
                         Return
                     }
                     
                     $roles = Get-ARTADRoleAssignment
                     if ($roles -ne $null -and $roles.Length -gt 0) {
-                        Write-Host "[+] However user does have access via Microsoft Graph to Azure AD - and these are his Roles Assigned:"
+                        Write-Host "[+] However user does have access via Microsoft Graph to Azure AD - and these are his Roles Assigned:" -ForegroundColor Green
                         $roles | ft
                     }
                 }
             }
         }
         catch {
-            Write-Host "[-] Current User context does not have access to Azure AD.`n"
+            Write-Host "[-] Current User context does not have access to Azure AD.`n" -ForegroundColor Red
             
             if ($PSCmdlet.MyInvocation.BoundParameters["Verbose"].IsPresent) {
                 throw
@@ -2052,7 +2109,7 @@ Function Get-ARTADAccess {
         }
     }
     catch {
-        Write-Host "[!] Function failed!"
+        Write-Host "[!] Function failed!" -ForegroundColor Red
         Throw
         Return
     }
@@ -2129,7 +2186,7 @@ Function Get-ARTRESTMethod {
         }
     }
     catch {
-        Write-Host "[!] Function failed!"
+        Write-Host "[!] Function failed!" -ForegroundColor Red
         Throw
         Return
     }
@@ -2251,7 +2308,7 @@ Function Add-ARTADAppSecret {
         }
     }
     catch {
-        Write-Host "[!] Function failed!"
+        Write-Host "[!] Function failed!" -ForegroundColor Red
         Throw
         Return
     }

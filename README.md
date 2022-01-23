@@ -24,15 +24,15 @@ I'm developing next cmdlets along the way of learning Azure & Azure AD threat su
 
 ## Installation
 
-This module depends on Powershell `Az` and `AzureAD` modules pre-installed. `az cli` is optional and not required. 
+This module depends on Powershell `Az` and `AzureAD` modules pre-installed. `Microsoft.Graph` and `az cli` are optional but nonetheless really useful. 
 Before one starts crafting around Azure, following commands may be used to prepare one's offensive environment:
 
 ```
-Install-Module Az -Force -Confirm -AllowClobber
-Install-Module AzureAD -Force -Confirm -AllowClobber
-Install-Module Microsoft.Graph -Force -Confirm -AllowClobber
-Install-Module MSOnline -Force -Confirm -AllowClobber
-Install-Module AzureADPreview -Force -Confirm -AllowClobber
+Install-Module Az -Force -Confirm -AllowClobber -Scope CurrentUser
+Install-Module AzureAD -Force -Confirm -AllowClobber -Scope CurrentUser
+Install-Module Microsoft.Graph -Force -Confirm -AllowClobber -Scope CurrentUser
+Install-Module MSOnline -Force -Confirm -AllowClobber -Scope CurrentUser
+Install-Module AzureADPreview -Force -Confirm -AllowClobber -Scope CurrentUser
 ```
 
 Even though only first two modules are required by `AzureRT`, its good to have others pre-installed too.
@@ -57,7 +57,8 @@ Every cmdlet has a nice help message detailing parameters, description and examp
 PS C:\> Get-Help Connect-ART
 ```
 
-**Currently, following batteries are included:**
+**Currently, following utilities are included:**
+
 
 ### Authentication & Token mechanics 
 
@@ -95,7 +96,6 @@ PS C:\> Get-Help Connect-ART
 - **`Get-ARTADRolePermissions`** - Displays all granted permissions on a specified Azure AD role.
 
 - **`Get-ARTKeyVaultSecrets`** - Lists all available Azure Key Vault secrets. This cmdlet assumes that requesting user connected to the Azure AD with KeyVaultAccessToken (scoped to https://vault.azure.net) and has "Key Vault Secrets User" role assigned (or equivalent).
-
 
 
 ### Privilege Escalation
