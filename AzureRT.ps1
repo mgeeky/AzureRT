@@ -1599,8 +1599,8 @@ Function Get-ARTRolePermissions {
             Return
         }
 
-        Write-Host "Role Name:     $RoleName"
-        Write-Host "Is Custom Rol: $($role.IsCustom)"
+        Write-Host "Role Name      : $RoleName"
+        Write-Host "Is Custom Role : $($role.IsCustom)"
 
         if($role.Actions.Length -gt 0 ) {
             Write-Host "`nActions:"
