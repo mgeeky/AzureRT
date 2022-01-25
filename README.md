@@ -85,6 +85,8 @@ PS C:\> Get-Help Connect-ART
 
 - **`Get-ARTADAccess`** - Performs Azure AD Situational Awareness.
 
+- **`Get-ARTDangerousPermissions`** - Analyzes accessible Azure Resources and associated permissions user has on them to find all the Dangerous ones that could be abused by an attacker.
+
 - **`Get-ARTResource`** - Authenticates to the https://management.azure.com using provided Access Token and pulls accessible resources and permissions that token Owner have against them.
 
 - **`Get-ARTRoleAssignment`** - Displays a bit easier to read representation of assigned Azure RBAC roles to the currently used Principal.
@@ -99,6 +101,8 @@ PS C:\> Get-Help Connect-ART
 
 - **`Get-ARTAutomationRunbookCode`** - Invokes REST API method to pull specified Runbook's source code.
 
+- **`Get-ARTAzureVMPublicIP`** - Retrieves Azure VM Public IP address
+
 
 ### Privilege Escalation
 
@@ -112,6 +116,8 @@ PS C:\> Get-Help Connect-ART
 ### Lateral Movement
 
 - **`Invoke-ARTAutomationRunbook`** - Creates an Automation Runbook under specified Automation Account and against selected Worker Group. That Runbook will contain Powershell commands to be executed on all the affected Azure VMs.
+
+- **`Invoke-ARTRunCommand`** - Abuses virtualMachines/runCommand permission against a specified Azure VM to run custom Powershell command.
 
 
 ### Misc

