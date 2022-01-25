@@ -29,13 +29,20 @@ $KnownDangerousPermissions = @{
     'virtualMachines/`*'             = 'Complete control over Azure VM can lead to a machine takeover by Running arbitrary Powershell commands (runCommand)'
     'virtualMachines/runCommand'     = 'Allows User to Compromise Azure VM by Running arbitrary Powershell commands.'
     
-    'secrets/getSecret'              = 'Allows User to display Azure Key Vault Secrets.'
+    'secrets/getSecret'              = 'User can read Key Vault Secret contents'
+    'vaults/*/read'                  = 'User can access Key Vault Secrets.'
+    'Microsoft.KeyVault/vaults/`*'   = 'User can access Key Vault Secrets.'
+    'vaults/certificatecas/`*'       = 'User can access Key Vault Certificates'
+    'vaults/certificates/`*'         = 'User can access Key Vault Certificates'
+    'vaults/keys/`*'                 = 'User can access Key Vault Keys'
+    'vaults/secrets/`*'              = 'User can access Key Vault Keys'
 
+    'automationAccounts/`*'          = 'Allows User to compromise Azure VM & Hybrid machines through Azure Automation Runbooks'
     'automationAccounts/jobs/`*'     = 'Allows User to compromise Azure VM & Hybrid machines through Azure Automation Account Jobs'
     'automationAccounts/jobs/write'  = 'Allows User to compromise Azure VM & Hybrid machines through Azure Automation Account Jobs'
-    'automationAccounts/runbooks/`*' = 'Allows User to compromise Azure VM & Hybrid machines through Azure Automation Account Jobs'
+    'automationAccounts/runbooks/`*' = 'Allows User to compromise Azure VM & Hybrid machines through Azure Automation Runbooks'
 
-    '/`*'                            = 'Unlimited privileges in specified Azure Service. May result in data compromise, infiltration and other attacks.'
+    '/`*'                            = 'Unlimited privileges in a specified Azure Service. May result in data compromise, infiltration and other attacks.'
 }
 
 
@@ -180,7 +187,7 @@ Function Get-ARTWhoami {
     }
 
     if($All -or $AzCli) {
-        Write-Host "=== AZ CLI context:" -ForegroundColor Yellow
+        Write-Host "`n=== AZ CLI context:" -ForegroundColor Yellow
         
         try {
             az account show | Out-Null
@@ -214,6 +221,70 @@ Function Get-ARTWhoami {
     
     $ErrorActionPreference = $EA
 }
+
+
+Function Get-ARTSubscriptionId {
+    <#
+    .SYNOPSIS
+        Returns the first Subscription ID available.
+
+    .DESCRIPTION
+        Returns the first Subscription ID available.
+
+    .PARAMETER AccessToken
+        Azure Management Access Token
+
+    .EXAMPLE
+        PS> Get-ARTSubscriptionId -AccessToken $token
+    #>
+
+    [cmdletbinding()]
+    param(
+        [Parameter(Mandatory=$False)]
+        [string]
+        $AccessToken
+    )
+
+    try {
+
+        $EA = $ErrorActionPreference
+        $ErrorActionPreference = 'silentlycontinue'
+
+        if($AccessToken -ne $null -and $AccessToken.Length -gt 0) {
+            $headers = @{
+                'Authorization' = "Bearer $AccessToken"
+            }
+        
+            $SubscriptionId = (Invoke-RestMethod -Uri "https://management.azure.com/subscriptions?api-version=2020-01-01" -Headers $headers).value.subscriptionId
+        }
+        else {
+            $SubscriptionId = (Get-AzContext).Subscription.Id
+        }
+
+        if($SubscriptionId -eq $null -or $SubscriptionId.Length -eq 0) { 
+            throw "Could not acquire Subscription ID!"
+        }
+
+        if( $SubscriptionId.Split(' ').Length -gt 1 ) {
+            $First = $SubscriptionId.Split(' ')[0]
+            Write-Warning "[#] WARNING: There are multiple Subscriptions available in this Tenant! Specify -SubscriptionId parameter to narrow down results."
+            Write-Warning "             Picking the first Subscription Id: $First"
+
+            $SubscriptionId = $First
+        }
+
+        return $SubscriptionId.Split(' ')[0]
+    }
+    catch {
+        Write-Host "[!] Function failed!" -ForegroundColor Red
+        Throw
+        Return
+    }
+    finally {
+        $ErrorActionPreference = $EA
+    }
+}
+
 
 Function Parse-JWTtokenRT {
     [alias("Parse-JWTokenRT")]
@@ -451,7 +522,7 @@ Function Connect-ART {
 
             if($SubscriptionId -eq $null -or $SubscriptionId.Length -eq 0) {
 
-                $SubscriptionId = (Invoke-RestMethod -Uri "https://management.azure.com/subscriptions?api-version=2020-01-01" -Headers $headers).value.subscriptionId
+                $SubscriptionId = Get-ARTSubscriptionId -AccessToken $AccessToken
                 
                 if(-not ($SubscriptionId -eq $null -or $SubscriptionId.Length -eq 0)) {
                     $params["SubscriptionId"] = $SubscriptionId
@@ -1223,7 +1294,7 @@ Function Get-ARTDangerousPermissions {
         Write-Verbose "Will use resource: $resource"
 
         if($SubscriptionId -eq $null -or $SubscriptionId -eq "") {
-            $SubscriptionId = (Invoke-RestMethod -Uri "$resource/subscriptions?api-version=2020-01-01" -Headers $headers).value.subscriptionId 
+            $SubscriptionId = Get-ARTSubscriptionId -AccessToken $AccessToken
         }
 
         if($SubscriptionId -eq $null -or $SubscriptionId -eq "") {
@@ -1250,12 +1321,10 @@ Function Get-ARTDangerousPermissions {
         $dangerousscopes = New-Object System.Collections.ArrayList
 
         $resources | % {
-            try
-            {
+            try {
                 $permissions = ((Invoke-RestMethod -Uri "https://management.azure.com$($_.id)/providers/Microsoft.Authorization/permissions?api-version=2018-07-01" -Headers $headers).value).actions
             }
-            catch
-            {
+            catch {
                 $permissions = @()
             }
 
@@ -1378,7 +1447,7 @@ Function Get-ARTResource {
         Write-Verbose "Will use resource: $resource"
 
         if($SubscriptionId -eq $null -or $SubscriptionId -eq "") {
-            $SubscriptionId = (Invoke-RestMethod -Uri "$resource/subscriptions?api-version=2020-01-01" -Headers $headers).value.subscriptionId 
+            $SubscriptionId = Get-ARTSubscriptionId -AccessToken $AccessToken
         }
 
         if($SubscriptionId -eq $null -or $SubscriptionId -eq "") {
@@ -2030,28 +2099,51 @@ Function Get-ARTRoleAssignment {
     .SYNOPSIS
         Displays Azure Role assignment on a currently authenticated user.
 
+    .PARAMETER Scope
+        Optional parameter that specifies which Azure Resource IAM Access Policy is to be examined.
+
     .DESCRIPTION
         Displays a bit easier to read representation of assigned Azure RBAC roles to the currently used Principal.
 
     .EXAMPLE
+        Example 1: Examine Roles Assigned on a current User
         PS> Get-ARTRoleAssignment | Format-Table
+
+        Example 2: Examine Roles Assigned on a specific Azure VM
+        PS> Get-ARTRoleAssignment -Scope /subscriptions/<SUB-ID>/resourceGroups/<ResGrName>/providers/Microsoft.Compute/virtualMachines/<VM-Name>
     #>
+    [CmdletBinding()]
+    Param(
+        [Parameter(Mandatory=$False)]
+        [String]
+        $Scope
+    )
 
     try {
         $EA = $ErrorActionPreference
         $ErrorActionPreference = 'silentlycontinue'
 
-        $roles = Get-AzRoleAssignment
+        if($Scope -ne $null -and $Scope.Length -gt 0 ) {
+
+            Write-Verbose "Pulling Azure RBAC Role Assignment on resource scoped to:`n`t$Scope`n"
+            $roles = Get-AzRoleAssignment -Scope $Scope
+        }
+        else {
+            $roles = Get-AzRoleAssignment
+        }
+
         $Coll = New-Object System.Collections.ArrayList
         $roles | % {
             $parts = $_.Scope.Split('/')
             $scope = $parts[6..$parts.Length] -join '/'
 
             $obj = [PSCustomObject]@{
+                DisplayName       = $_.DisplayName
                 RoleDefinitionName= $_.RoleDefinitionName
                 Resource          = $scope
                 ResourceGroup     = $parts[4]
                 ObjectType        = $_.ObjectType
+                SignInName       = $_.SignInName
                 CanDelegate       = $_.CanDelegate
                 Scope             = $_.Scope
             }
@@ -2317,6 +2409,9 @@ Function Get-ARTAccess {
     .SYNOPSIS
         Performs Azure Situational Awareness.
 
+    .PARAMETER SubscriptionId
+        Optional parameter specifying Subscription to examine.
+
     .DESCRIPTION
         Enumerate all accessible Azure resources, permissions, roles assigned for a quick Situational Awareness.
 
@@ -2325,6 +2420,9 @@ Function Get-ARTAccess {
     #>
     [CmdletBinding()]
     Param(
+        [Parameter(Mandatory=$False)]
+        [String]
+        $SubscriptionId = $null
     )
 
     try {
@@ -2332,12 +2430,18 @@ Function Get-ARTAccess {
         $ErrorActionPreference = 'silentlycontinue'
 
         try {
+            if($SubscriptionId -eq $null -or $SubscriptionId.Length -eq 0) {
+                $SubscriptionId = Get-ARTSubscriptionId
+            }
+
+            Set-AzContext -Subscription $SubscriptionId | Out-Null
+
             $res = Get-AzResource
 
             Write-Verbose "Step 1. Checking Dangerous Permissions that User has on Azure Resources..."
 
             Write-Host "`n=== Dangerous Permissions on Azure Resources:`n" -ForegroundColor Yellow
-            $res = Get-ARTResource
+            $res = Get-ARTDangerousPermissions -SubscriptionId $SubscriptionId
 
             if ($res -ne $null -and $res.Length -gt 0) {
                 Write-Host "[+] Following Dangerous Permissions were Identified on Azure Resources:" -ForegroundColor Green
@@ -2350,7 +2454,7 @@ Function Get-ARTAccess {
             Write-Verbose "Step 2. Checking accessible Azure Resources..."
 
             Write-Host "`n=== Accessible Azure Resources:`n" -ForegroundColor Yellow
-            $res = Get-ARTResource
+            $res = Get-ARTResource -SubscriptionId $SubscriptionId
 
             if ($res -ne $null -and $res.Length -gt 0) {
                 Write-Host "[+] Accessible Azure Resources & corresponding permissions:" -ForegroundColor Green
@@ -2364,7 +2468,7 @@ Function Get-ARTAccess {
                 Write-Verbose "Step 3. Checking assigned Azure RBAC Roles..."
                 Write-Host "`n=== Assigned Azure RBAC Roles:`n" -ForegroundColor Yellow
 
-                $roles = Get-ARTRoleAssignment
+                $roles = Get-ARTRoleAssignment -SubscriptionId $SubscriptionId
                 if ($roles -ne $null -and $roles.Length -gt 0) {
                     Write-Host "[+] Azure RBAC Roles Assigned:" -ForegroundColor Green
                     $roles | ft
@@ -2397,7 +2501,7 @@ Function Get-ARTAccess {
             try {
                 Write-Verbose "Step 5. Checking access to Az.AD / AzureAD via Az module..."
                 Write-Host "`n=== User Access to Az.AD:`n" -ForegroundColor Yellow
-                $users = Get-AzADUser -ErrorAction SilentlyContinue
+                $users = Get-AzADUser -First 1 -ErrorAction SilentlyContinue
 
                 if ($users -ne $null -and $users.Length -gt 0) {
                     Write-Host "[+] User has access to Azure AD via Az.AD module (e.g. Get-AzADUser)." -ForegroundColor Green

@@ -117,12 +117,14 @@ PS C:\> Get-Help Connect-ART
 
 - **`Invoke-ARTAutomationRunbook`** - Creates an Automation Runbook under specified Automation Account and against selected Worker Group. That Runbook will contain Powershell commands to be executed on all the affected Azure VMs.
 
-- **`Invoke-ARTRunCommand`** - Abuses virtualMachines/runCommand permission against a specified Azure VM to run custom Powershell command.
+- **`Invoke-ARTRunCommand`** - Abuses `virtualMachines/runCommand` permission against a specified Azure VM to run custom Powershell command.
 
 
 ### Misc
 
 - **`Get-ARTUserId`** - Acquires current user or user specified in parameter ObjectId via `Az` module
+
+- **`Get-ARTSubscriptionId`** - Helper that collects current Subscription ID.
 
 - **`Parse-JWTtokenRT`** - Parses input JWT token and prints it out nicely.
 
