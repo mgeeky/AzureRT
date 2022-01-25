@@ -97,6 +97,8 @@ PS C:\> Get-Help Connect-ART
 
 - **`Get-ARTKeyVaultSecrets`** - Lists all available Azure Key Vault secrets. This cmdlet assumes that requesting user connected to the Azure AD with KeyVaultAccessToken (scoped to https://vault.azure.net) and has "Key Vault Secrets User" role assigned (or equivalent).
 
+- **`Get-ARTAutomationRunbookCode`** - Invokes REST API method to pull specified Runbook's source code.
+
 
 ### Privilege Escalation
 
@@ -118,7 +120,7 @@ PS C:\> Get-Help Connect-ART
 
 - **`Parse-JWTtokenRT`** - Parses input JWT token and prints it out nicely.
 
-- **`Get-ARTRESTMethod`** - Takes Access Token and invokes GET REST method API request against a specified URI. It also verifies whether provided token has required audience set.
+- **`Invoke-ARTGETRequest`** - Takes Access Token and invokes GET REST method API request against a specified URI. It also verifies whether provided token has required audience set.
 
 
 ---

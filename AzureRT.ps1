@@ -82,7 +82,7 @@ Function Get-ARTWhoami {
 
     if((Get-Command Get-AzContext) -and ($All -or $Az)) {
         
-        Write-Host "== Azure context (Az module):" -ForegroundColor Yellow
+        Write-Host "=== Azure context (Az module):" -ForegroundColor Yellow
         try {
             $AzContext = Get-AzContext
 
@@ -105,7 +105,7 @@ Function Get-ARTWhoami {
     }
 
     if((Get-Command Get-AzureADCurrentSessionInfo) -and ($All -or $AzureAD)) {
-        Write-Host "== Azure AD context (AzureAD module):" -ForegroundColor Yellow
+        Write-Host "=== Azure AD context (AzureAD module):" -ForegroundColor Yellow
         
         try {
             $AzADCurrSess = Get-AzureADCurrentSessionInfo
@@ -129,7 +129,7 @@ Function Get-ARTWhoami {
     }
 
     if ((Get-Command Get-MGContext) -and ($All -or $MGraph)) {
-        Write-Host "== Microsoft Graph context (Microsoft.Graph module):" -ForegroundColor Yellow
+        Write-Host "=== Microsoft Graph context (Microsoft.Graph module):" -ForegroundColor Yellow
         
         try {
             $mgContext = Get-MGContext
@@ -158,7 +158,7 @@ Function Get-ARTWhoami {
     }
 
     if($All -or $AzCli) {
-        Write-Host "== AZ CLI context:" -ForegroundColor Yellow
+        Write-Host "=== AZ CLI context:" -ForegroundColor Yellow
         
         try {
             az account show | Out-Null
@@ -1248,7 +1248,7 @@ Function Get-ARTResource {
         }
 
         if ($Text) {
-            Write-Host "== Accessible Azure Resources & Permissions ==`n"
+            Write-Host "=== Accessible Azure Resources & Permissions ==`n"
 
             $num = 1
             $Coll | % {
@@ -1396,6 +1396,133 @@ Function Get-ARTRolePermissions {
     }
 }
 
+Function Get-ARTAutomationRunbookCode {
+    <#
+    .SYNOPSIS
+        Retrieves automation's runbook code.
+
+    .DESCRIPTION
+        Invokes REST API method to pull specified Runbook's source code.
+
+    .PARAMETER RunbookName
+        Specifies Runbook's name.
+
+    .PARAMETER OutFile
+        Optional file name where to save retrieved source code.
+
+    .PARAMETER AutomationAccountName
+        Azure Automation account name that contains target runbook.
+
+    .PARAMETER ResourceGroupName
+        Azure Resource Group name that contains target Automation Account
+
+    .PARAMETER SubscriptionId
+        Azure Subscrition ID that contains target Resource Group
+
+    .EXAMPLE
+        Example 1: Will attempt to automatically find requested runbook and retrieve its code.
+        PS> Get-ARTAutomationRunbookCode -RunbookName MyLittleRunbook
+    #>
+
+    [CmdletBinding()]
+    Param(
+        [Parameter(Mandatory=$True)]
+        [String]
+        $RunbookName,
+
+        [Parameter(Mandatory=$False)]
+        [String]
+        $SubscriptionId = $null,
+
+        [Parameter(Mandatory=$False)]
+        [String]
+        $AutomationAccountName = $null,
+
+        [Parameter(Mandatory=$False)]
+        [String]
+        $ResourceGroupName = $null
+    )
+
+    try {
+        $EA = $ErrorActionPreference
+        $ErrorActionPreference = 'silentlycontinue'
+        
+        if(($AutomationAccount -eq $null -or $AutomationAccountName.Length -eq 0) -or ($ResourceGroupName -eq $null -or $ResourceGroupName.Length -eq 0) -or ($SubscriptionId -eq $null -or $SubscriptionId.Length -eq 0)) {
+            Get-AzAutomationAccount | % {
+                $AutomationAccount = $_
+
+                Write-Verbose "Enumerating account $($AutomationAccount.AutomationAccountName) in resource group $($AutomationAccount.ResourceGroupName) ..."
+
+                Get-AzAutomationRunbook -AutomationAccountName $AutomationAccount.AutomationAccountName -ResourceGroupName $AutomationAccount.ResourceGroupName | % {
+                    $Runbook = $_
+
+                    Write-Verbose "`tEnumerating runbook $($Runbook.Name) ..."
+
+                    if($_.Name -match $RunbookName) {
+                        $AutomationAccountName = $AutomationAccount.AutomationAccountName
+                        $ResourceGroupName = $AutomationAccount.ResourceGroupName
+                        $SubscriptionId = $AutomationAccount.SubscriptionId
+
+                        Write-Host "[+] Found requested Runbook in account: $AutomationAccountName - Resource group: $ResourceGroupName" -ForegroundColor Green
+                        break
+                    }
+                }
+
+                if(($SubscriptionId -ne $null -and $SubscriptionId.Length -gt 0) -and ($AutomationAccountName -ne $null -and $AutomationAccountName.Length -gt 0) -and ($ResourceGroupName -ne $null -and $ResourceGroupName.Length -gt 0)) {
+                    break
+                }
+            }
+        }
+
+        Write-Host "Runbook parameters:"
+        Write-Host "`t- RunbookName          : $RunbookName"
+        Write-Host "`t- AutomationAccountName: $AutomationAccountName"
+        Write-Host "`t- ResourceGroupName    : $ResourceGroupName"
+        Write-Host "`t- SubscriptionId       : $SubscriptionId`n"
+
+        if(($SubscriptionId -eq $null -or $SubscriptionId.Length -eq 0) -or ($AutomationAccountName -eq $null -or $AutomationAccountName.Length -eq 0) -or ($ResourceGroupName -eq $null -or $ResourceGroupName.Length -eq 0)) {
+            Write-Host "[!] Runbook not found!" -ForegroundColor Red
+            Return
+        }
+
+        Write-Verbose "Acquiring Azure access token from Connect-AzAccount..."
+        $AccessToken = Get-ARTAccessTokenAz -Resource https://management.azure.com
+
+        if ($AccessToken -eq $null -or $AccessToken.Length -eq 0 ) {
+            throw "Could not acquire Access Token!"
+        }
+
+        $URI = "https://management.azure.com/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroupName/providers/Microsoft.Automation/automationAccounts/$AutomationAccount/runbooks/$RunbookName/draft/content?api-version=2015-10-31"
+
+        $out = Invoke-ARTGETRequest -Uri $URI -AccessToken $AccessToken
+
+        if($out.Length -gt 0) {
+            if($OutFile -ne $null -and $OutFile.Length -gt 0) {
+                $out | Out-File $OutFile
+
+                Write-Host "[+] Runbook's code written to file: $OutFile" -ForegroundColor Green
+            }
+            else {
+                Write-Host "============================================================`n" -ForegroundColor Magenta
+                
+                Write-Host $out
+
+                Write-Host "`n============================================================`n" -ForegroundColor Magenta
+            }
+        }
+        else {
+            Write-Host "[-] Returned empty Runbook's code." -ForegroundColor Magenta
+        }
+    }
+    catch {
+        Write-Host "[!] Function failed!" -ForegroundColor Red
+        Throw
+        Return
+    }
+    finally {
+        $ErrorActionPreference = $EA
+    }
+}
 
 Function Invoke-ARTAutomationRunbook {
     <#
@@ -1416,16 +1543,16 @@ Function Invoke-ARTAutomationRunbook {
         Command to be executed in Runbook.
 
     .PARAMETER RemoveAfter
-        TODO
+        Remove Runbook after running it.
 
     .PARAMETER AutomationAccountName
-        TODO
+        Target Azure Automation account name.
 
     .PARAMETER ResourceGroupName
-        TODO
+        Target Azure Resource Group name.
 
     .PARAMETER WorkergroupName
-        TODO
+        Target Azure Workgroup Name.
 
     .EXAMPLE
         PS> Invoke-ARTAutomationRunbook -RunbookName MyLittleRunbook -ScriptPath .\ReverseShell.ps1 -Verbose
@@ -1514,12 +1641,15 @@ Function Invoke-ARTAutomationRunbook {
         
         Write-Verbose "[.] Will target resource group: $ResourceGroupName and automation account: $AutomationAccountName"
 
-        Write-Host "`nStep 2. List hybrid workers"
-        $workergroup = Get-AzAutomationHybridWorkerGroup -AutomationAccountName $AutomationAccountName -ResourceGroupName $ResourceGroupName
-        $Workergroup
-
         if($WorkergroupName -eq $null -or $WorkergroupName.Length -eq 0) {
+            Write-Host "`nStep 2. List hybrid workers"
+            $workergroup = Get-AzAutomationHybridWorkerGroup -AutomationAccountName $AutomationAccountName -ResourceGroupName $ResourceGroupName
+            $Workergroup
+
             $WorkergroupName = $workergroup.Name
+        }
+        else {
+            Write-Host "`nStep 2. Will use hybrid worker group: $WorkergroupName"
         }
 
         Write-Host "`nStep 3. Create a Powershell Runbook`n"
@@ -1925,7 +2055,7 @@ Function Get-ARTAccess {
 
             Write-Verbose "Step 1. Checking accessible Azure Resources..."
 
-            Write-Host "`n== Accessible Azure Resources:`n" -ForegroundColor Yellow
+            Write-Host "`n=== Accessible Azure Resources:`n" -ForegroundColor Yellow
             $res = Get-ARTResource
 
             if ($res -ne $null -and $res.Length -gt 0) {
@@ -1938,7 +2068,7 @@ Function Get-ARTAccess {
 
             try {
                 Write-Verbose "Step 2. Checking assigned Azure RBAC Roles..."
-                Write-Host "`n== Assigned Azure RBAC Roles:`n" -ForegroundColor Yellow
+                Write-Host "`n=== Assigned Azure RBAC Roles:`n" -ForegroundColor Yellow
 
                 $roles = Get-ARTRoleAssignment
                 if ($roles -ne $null -and $roles.Length -gt 0) {
@@ -1955,7 +2085,7 @@ Function Get-ARTAccess {
 
             try {
                 Write-Verbose "Step 3. Checking accessible Azure Key Vault Secrets..."
-                Write-Host "`n== Accessible Azure Key Vault Secrets:`n" -ForegroundColor Yellow
+                Write-Host "`n=== Accessible Azure Key Vault Secrets:`n" -ForegroundColor Yellow
                 $secrets = Get-ARTKeyVaultSecrets
 
                 if ($secrets -ne $null) {
@@ -1972,7 +2102,7 @@ Function Get-ARTAccess {
 
             try {
                 Write-Verbose "Step 4. Checking access to Az.AD / AzureAD via Az module..."
-                Write-Host "`n== User Access to Az.AD:`n" -ForegroundColor Yellow
+                Write-Host "`n=== User Access to Az.AD:`n" -ForegroundColor Yellow
                 $users = Get-AzADUser -ErrorAction SilentlyContinue
 
                 if ($users -ne $null -and $users.Length -gt 0) {
@@ -1988,7 +2118,7 @@ Function Get-ARTAccess {
 
             try {
                 Write-Verbose "Step 5. Enumerating resource group deployments..."
-                Write-Host "`n== Resource Group Deployments:`n" -ForegroundColor Yellow
+                Write-Host "`n=== Resource Group Deployments:`n" -ForegroundColor Yellow
 
                 $resourcegroups = Get-AzResourceGroup
 
@@ -2074,7 +2204,7 @@ Function Get-ARTADAccess {
             }
             
             Write-Verbose "Step 1. Checking assigned Azure AD Roles..."
-            Write-Host "`n== Azure AD Roles Assignment:`n" -ForegroundColor Yellow
+            Write-Host "`n=== Azure AD Roles assigned to current user:`n" -ForegroundColor Yellow
             $roles = Get-ARTADRoleAssignment
 
             if ($roles -ne $null -and $roles.Length -gt 0) {
@@ -2084,21 +2214,58 @@ Function Get-ARTADAccess {
             else {
                 Write-Host "[-] User does not have any Azure AD Roles assigned." -ForegroundColor Red
 
-                if(Get-Command Get-MGContext) {
-                    $users = Get-MgUser
+                try {
+                    if(Get-Command Get-MGContext) {
+                        $users = Get-MgUser -ErrorAction SilentlyContinue
 
-                    if ($users -eq $null -or $users.Length -eq 0) {
-                        Write-Host "[-] User does not have access to Microsoft.Graph either." -ForegroundColor Red
-                        Return
-                    }
-                    
-                    $roles = Get-ARTADRoleAssignment
-                    if ($roles -ne $null -and $roles.Length -gt 0) {
-                        Write-Host "[+] However user does have access via Microsoft Graph to Azure AD - and these are his Roles Assigned:" -ForegroundColor Green
-                        $roles | ft
+                        if ($users -eq $null -or $users.Length -eq 0) {
+                            Write-Verbose "[-] User does not have access to Microsoft.Graph either." -ForegroundColor Red
+                        }
+                        else {
+                            $roles = Get-ARTADRoleAssignment
+                            if ($roles -ne $null -and $roles.Length -gt 0) {
+                                Write-Host "[+] However user does have access via Microsoft Graph to Azure AD - and these are his Roles Assigned:" -ForegroundColor Green
+                                $roles | ft
+                            }
+                        }
                     }
                 }
+                catch {
+                    Write-Verbose "[-] Could not enumerate Azure AD Roles via Microsoft.Graph either." -ForegroundColor Red
+                }
             }
+
+            Write-Verbose "Step 2. Checking Azure AD Roles that are In-Use..."
+            Write-Host "`n=== Azure AD Roles Assigned In Tenant To Different Users:`n" -ForegroundColor Yellow
+            
+            $Coll = New-Object System.Collections.ArrayList
+            $azureadroles = Get-AzureADDirectoryRole
+
+            $azureadroles | % {
+                Write-Verbose "Enumerating role `"$($_.DisplayName)`" ..."
+                $members = Get-AzureADDirectoryRoleMember -ObjectId $_.ObjectId
+            
+                $RoleName = $_.DisplayName
+                $RoleId = $_.ObjectId
+ 
+                $obj = [PSCustomObject]@{
+                    RoleName     = $RoleName
+                    MembersCount = $members.Length
+                    IsCustom     = -not $_.IsSystem
+                    RoleId       = $RoleId
+                }
+
+                $null = $Coll.Add($obj)
+            }
+
+            if ($Coll -ne $null) {
+                Write-Host "[+] Azure AD Roles In-Use:" -ForegroundColor Green
+                $Coll | sort -property MembersCount -Descending | ft
+            }
+            else {
+                Write-Host "[-] Could not list Azure AD Roles In-Use." -ForegroundColor Red
+            }
+
         }
         catch {
             Write-Host "[-] Current User context does not have access to Azure AD.`n" -ForegroundColor Red
@@ -2119,7 +2286,7 @@ Function Get-ARTADAccess {
 }
 
 
-Function Get-ARTRESTMethod {
+Function Invoke-ARTGETRequest {
     <#
     .SYNOPSIS
         Invokes REST Method GET to the specified URI.
@@ -2137,7 +2304,7 @@ Function Get-ARTRESTMethod {
         Return results as JSON.
 
     .EXAMPLE
-        PS> Get-ARTRESTMethod -Uri "https://management.azure.com/subscriptions?api-version=2020-01-01" -AccessToken $token
+        PS> Invoke-ARTGETRequest -Uri "https://management.azure.com/subscriptions?api-version=2020-01-01" -AccessToken $token
     #>
 
     [CmdletBinding()]
