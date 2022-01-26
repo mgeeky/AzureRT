@@ -2143,8 +2143,9 @@ Function Get-ARTRoleAssignment {
                 Resource          = $scope
                 ResourceGroup     = $parts[4]
                 ObjectType        = $_.ObjectType
-                SignInName       = $_.SignInName
+                SignInName        = $_.SignInName
                 CanDelegate       = $_.CanDelegate
+                ObjectId          = $_.ObjectId
                 Scope             = $_.Scope
             }
 
@@ -2662,6 +2663,34 @@ Function Get-ARTADAccess {
             }
             else {
                 Write-Host "[-] Could not list Azure AD Roles In-Use." -ForegroundColor Red
+            }
+
+            Write-Verbose "Step 3. Examining Administrative Units..."
+            Write-Host "`n=== Azure AD Administrative Units:`n" -ForegroundColor Yellow
+            
+            $Coll = New-Object System.Collections.ArrayList
+            $units = Get-AzureADMSAdministrativeUnit
+
+            $units | % {
+                Write-Verbose "Enumerating unit `"$($_.DisplayName)`" ..."
+                $members = Get-AzureADMSAdministrativeUnitMember -Id $_.Id
+ 
+                $obj = [PSCustomObject]@{
+                    AdministrativeUnit   = $_.DisplayName
+                    MembersCount         = $members.Length
+                    Description          = $_.Id
+                    AdministrativeUnitId = $_.Id
+                }
+
+                $null = $Coll.Add($obj)
+            }
+
+            if ($Coll -ne $null) {
+                Write-Host "[+] Azure AD Administrative Units:" -ForegroundColor Green
+                $Coll | sort -property MembersCount -Descending | ft
+            }
+            else {
+                Write-Host "[-] Could not list Azure AD Administrative Units." -ForegroundColor Red
             }
 
         }
