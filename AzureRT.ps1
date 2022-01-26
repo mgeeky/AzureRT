@@ -42,6 +42,11 @@ $KnownDangerousPermissions = @{
     'automationAccounts/jobs/write'  = 'Allows User to compromise Azure VM & Hybrid machines through Azure Automation Account Jobs'
     'automationAccounts/runbooks/`*' = 'Allows User to compromise Azure VM & Hybrid machines through Azure Automation Runbooks'
 
+    'users/password/update'                    = 'User can reset Other non-admin user passwords'
+    'users/authenticationMethods/create'       = 'User can create new Authentication Method on another user'
+    'users/authenticationMethods/delete'       = 'User can delete Authentication Method of another user.'
+    'users/authenticationMethods/basic/update' = 'User can update authentication methods of another user'
+
     '/`*'                            = 'Unlimited privileges in a specified Azure Service. May result in data compromise, infiltration and other attacks.'
 }
 
@@ -1873,7 +1878,11 @@ Function Invoke-ARTAutomationRunbook {
         }
 
         if($PsCmdlet.ParameterSetName -eq "Auto") {
-            # /subscriptions/<SUBSCRIPTION-ID>/resourceGroups/<RG-NAME>/providers/Microsoft.Automation/automationAccounts/<AUTOMATION-ACCOUNT-NAME>
+            if ($roles -eq $null -or $roles.Length -eq 0 ) {
+                throw "Unable to automatically establish Automation Account Name and Resource Group Name. Pass them manually via parameters."
+                return
+            }
+
             $parts = $roles[0].Scope.Split('/')
 
             if($AutomationAccountName -eq $null -or $AutomationAccountName.Length -eq 0) {
@@ -2165,51 +2174,6 @@ Function Get-ARTRoleAssignment {
 }
 
 
-Function Get-ARTADRoleAssignment {
-    <#
-    .SYNOPSIS
-        Displays Azure AD Role assignment on a currently authenticated user.
-
-    .DESCRIPTION
-        Displays a bit easier to read representation of assigned Azure AD roles to the currently used Principal.
-
-    .EXAMPLE
-        PS> Get-ARTADRoleAssignment | Format-Table
-    #>
-
-    try {
-        $EA = $ErrorActionPreference
-        $ErrorActionPreference = 'silentlycontinue'
-
-        $roles = Get-AzureADDirectoryRoleAssignment
-        $Coll = New-Object System.Collections.ArrayList
-        $roles | % {
-            $parts = $_.Scope.Split('/')
-            $scope = $parts[6..$parts.Length] -join '/'
-
-            $obj = [PSCustomObject]@{
-                RoleDefinitionName= $_.RoleDefinitionName
-                Resource          = $scope
-                ResourceGroup     = $parts[4]
-                ObjectType        = $_.ObjectType
-                CanDelegate       = $_.CanDelegate
-                Scope             = $_.Scope
-            }
-
-            $null = $Coll.Add($obj)
-        }
-
-        $Coll
-    }
-    catch {
-        Write-Host "[!] Function failed!" -ForegroundColor Red
-        Throw
-        Return
-    }
-    finally {
-        $ErrorActionPreference = $EA
-    }
-}
 
 Function Add-ARTUserToRole {
     <#
@@ -2392,6 +2356,82 @@ Function Get-ARTADRoleAssignment {
 
         if($count -eq 0) {
             Write-Host "[-] No Azure AD Role assignment found.`n" -ForegroundColor Red
+        }
+    }
+    catch {
+        Write-Host "[!] Function failed!" -ForegroundColor Red
+        Throw
+        Return
+    }
+    finally {
+        $ErrorActionPreference = $EA
+    }
+}
+
+
+Function Get-ARTADScopedRoleAssignment {
+    <#
+    .SYNOPSIS
+        Displays Azure AD Scoped Role assignment - those associated with Administrative Units
+
+    .DESCRIPTION
+        Displays Azure AD Scoped Role assignments on a current user or on all Azure AD users, associated with Administrative Units
+
+    .PARAMETER All
+        Display all Azure AD role assignments
+
+    .EXAMPLE
+        Example 1: Get current user Azure AD Scoped Role Assignment
+        PS> Get-ARTADScopedRoleAssignment
+
+        Example 2: Get all users Azure AD Scoped Role Assignments
+        PS> Get-ARTADScopedRoleAssignment -All
+    #>
+
+    [CmdletBinding()]
+    Param(
+        [Parameter(Mandatory=$False)]
+        [Switch]
+        $All
+    )
+
+    try {
+        $EA = $ErrorActionPreference
+        $ErrorActionPreference = 'silentlycontinue'
+
+        $Coll = New-Object System.Collections.ArrayList
+        $UserId = Get-ARTUserId
+        $count = 0
+        
+        Get-AzureADMSAdministrativeUnit | % { 
+            Write-Verbose "Enumerating Scoped role `"$($_.DisplayName)`" ..."
+            $members = Get-AzureADMSScopedRoleMembership -Id $_.Id
+            
+            $RoleName        = $_.DisplayName
+            $RoleId          = $_.Id
+            $RoleDescription = $_.Description
+
+            $members | % { 
+                $obj = [PSCustomObject]@{
+                    DisplayName           = $_.RoleMemberInfo.DisplayName
+                    ScopedRoleName        = $RoleName
+                    UserId                = $_.RoleMemberInfo.Id
+                    UserPrincipalName     = $_.RoleMemberInfo.UserPrincipalName
+                    ScopedRoleId          = $RoleId
+                    ScopedRoleDescription = $RoleDescription
+                }
+
+                if (($All) -or ($_.RoleMemberInfo.Id -eq $UserId)) {
+                    $null = $Coll.Add($obj)
+                    $count += 1
+                }
+            }
+        }
+
+        $Coll
+
+        if($count -eq 0) {
+            Write-Host "[-] No Azure AD Scoped Role assignment found.`n" -ForegroundColor Red
         }
     }
     catch {
@@ -2630,7 +2670,7 @@ Function Get-ARTADAccess {
                     }
                 }
                 catch {
-                    Write-Verbose "[-] Could not enumerate Azure AD Roles via Microsoft.Graph either." -ForegroundColor Red
+                    Write-Verbose "[-] Could not enumerate Azure AD Roles via Microsoft.Graph either."
                 }
             }
 
@@ -2678,7 +2718,7 @@ Function Get-ARTADAccess {
                 $obj = [PSCustomObject]@{
                     AdministrativeUnit   = $_.DisplayName
                     MembersCount         = $members.Length
-                    Description          = $_.Id
+                    Description          = $_.Description
                     AdministrativeUnitId = $_.Id
                 }
 
@@ -2693,6 +2733,17 @@ Function Get-ARTADAccess {
                 Write-Host "[-] Could not list Azure AD Administrative Units." -ForegroundColor Red
             }
 
+            Write-Verbose "Step 4. Checking Azure AD Scoped Roles..."
+            Write-Host "`n=== Azure AD Scoped Roles assigned to current user:`n" -ForegroundColor Yellow
+            $roles = Get-ARTADScopedRoleAssignment
+
+            if ($roles -ne $null ) {
+                Write-Host "[+] Azure AD Scoped Roles Assigned:" -ForegroundColor Green
+                $roles | ft
+            }
+            else {
+                Write-Host "[-] User does not have any Azure AD Scoped Roles assigned." -ForegroundColor Red
+            }
         }
         catch {
             Write-Host "[-] Current User context does not have access to Azure AD.`n" -ForegroundColor Red
