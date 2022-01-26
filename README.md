@@ -93,6 +93,8 @@ PS C:\> Get-Help Connect-ART
 
 - **`Get-ARTADRoleAssignment`** - Displays Azure AD Role assignments on a current user or on all Azure AD users.
 
+- **`Get-ARTADScopedRoleAssignment`** - Displays Azure AD Scoped Role assignments on a current user or on all Azure AD users, associated with Administrative Units
+
 - **`Get-ARTRolePermissions`** - Displays all granted permissions on a specified Azure RBAC role.
 
 - **`Get-ARTADRolePermissions`** - Displays all granted permissions on a specified Azure AD role.
