@@ -108,6 +108,8 @@ PS C:\> Get-Help Connect-ART
 
 ### Privilege Escalation
 
+- **`Set-ARTADUserPassword`** - Abuses `Authentication Administrator` Role Assignment to reset other non-admin users password.
+
 - **`Add-ARTUserToGroup`** - Adds a specified Azure AD User to the specified Azure AD Group.
 
 - **`Add-ARTUserToRole`** - Adds a specified Azure AD User to the specified Azure AD Role.

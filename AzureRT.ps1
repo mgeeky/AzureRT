@@ -3021,3 +3021,61 @@ Function Get-ARTAzureVMPublicIP {
         $ErrorActionPreference = $EA
     }
 }
+
+
+Function Set-ARTADUserPassword {
+    <#
+    .SYNOPSIS
+        Sets/Resets another Azure AD User Password.
+
+    .DESCRIPTION
+        Sets/Resets another Azure AD User Password.
+
+    .PARAMETER TargetUser
+        Specifies Target User name/UserPrincipalName/UserID to have his password changed.
+
+    .PARAMETER Password
+        Specifies new password to set.
+
+    .EXAMPLE
+        PS> Set-ARTADUserPassword -TargetUser michael@contoso.onmicrosoft.com -Password "SuperSecret@123"
+    #>
+
+    [CmdletBinding()]
+    Param(
+        [Parameter(Mandatory=$True)]
+        [String]
+        $TargetUser,
+
+        [Parameter(Mandatory=$True)]
+        [String]
+        $Password
+    )
+
+    try {
+        $EA = $ErrorActionPreference
+        $ErrorActionPreference = 'silentlycontinue'
+
+        $passobj = $Password | ConvertTo-SecureString -AsPlainText -Force 
+        
+        $TargetUserObj = (Get-AzureADUser -All $True | ? { $_.UserPrincipalName -eq $TargetUser -or $_.ObjectId -eq $TargetUser -or $_.DisplayName -eq $TargetUser})
+
+        if($TargetUserObj -eq $null -or $TargetUserObj.ObjectId -eq $null -or $TargetUserObj.ObjectId.Length -eq 0) {
+            Write-Host "[!] Could not find target user based on his name." -ForegroundColor Red
+            Return
+        }
+
+        $TargetUserObj.ObjectId | Set-AzureADUserPassword -Password $passobj -Verbose
+        Write-Host "[+] User password most likely changed." -ForegroundColor Green
+        Write-Host "Affected user:"
+        $TargetUserObj
+    }
+    catch {
+        Write-Host "[!] Function failed!" -ForegroundColor Red
+        Throw
+        Return
+    }
+    finally {
+        $ErrorActionPreference = $EA
+    }
+}
