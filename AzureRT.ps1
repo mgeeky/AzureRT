@@ -2636,13 +2636,26 @@ Function Get-ARTADAccess {
 
         try {
             $users = Get-AzureADUser
+            $UserId = Get-ARTUserId
 
             if ($users -eq $null -or $users.Length -eq 0) {
                 Write-Host "[-] User does not have access to Azure AD." -ForegroundColor Red
                 Return
             }
             
-            Write-Verbose "Step 1. Checking assigned Azure AD Roles..."
+            Write-Verbose "Step 1. Enumerating current user group membership..."
+            Write-Host "`n=== Azure AD Groups that User is member of:`n" -ForegroundColor Yellow
+            $groups = Get-AzureADUserMembership -ObjectId $UserId
+
+            if ($groups -ne $null -and $groups.Length -gt 0) {
+                Write-Host "[+] User is member of following Azure AD Groups:" -ForegroundColor Green
+                $groups | ft
+            }
+            else {
+                Write-Host "[-] User is not a member of any Azure AD Group." -ForegroundColor Red
+            }
+            
+            Write-Verbose "Step 2. Checking assigned Azure AD Roles..."
             Write-Host "`n=== Azure AD Roles assigned to current user:`n" -ForegroundColor Yellow
             $roles = Get-ARTADRoleAssignment
 
@@ -2651,7 +2664,7 @@ Function Get-ARTADAccess {
                 $roles | ft
             }
             else {
-                Write-Host "[-] User does not have any Azure AD Roles assigned." -ForegroundColor Red
+                #Write-Host "[-] User does not have any Azure AD Roles assigned." -ForegroundColor Red
 
                 try {
                     if(Get-Command Get-MGContext) {
@@ -2674,7 +2687,7 @@ Function Get-ARTADAccess {
                 }
             }
 
-            Write-Verbose "Step 2. Checking Azure AD Roles that are In-Use..."
+            Write-Verbose "Step 3. Checking Azure AD Roles that are In-Use..."
             Write-Host "`n=== Azure AD Roles Assigned In Tenant To Different Users:`n" -ForegroundColor Yellow
             
             $Coll = New-Object System.Collections.ArrayList
@@ -2705,7 +2718,7 @@ Function Get-ARTADAccess {
                 Write-Host "[-] Could not list Azure AD Roles In-Use." -ForegroundColor Red
             }
 
-            Write-Verbose "Step 3. Examining Administrative Units..."
+            Write-Verbose "Step 4. Examining Administrative Units..."
             Write-Host "`n=== Azure AD Administrative Units:`n" -ForegroundColor Yellow
             
             $Coll = New-Object System.Collections.ArrayList
@@ -2742,7 +2755,7 @@ Function Get-ARTADAccess {
                 $roles | ft
             }
             else {
-                Write-Host "[-] User does not have any Azure AD Scoped Roles assigned." -ForegroundColor Red
+                #Write-Host "[-] User does not have any Azure AD Scoped Roles assigned." -ForegroundColor Red
             }
         }
         catch {
@@ -3079,3 +3092,66 @@ Function Set-ARTADUserPassword {
         $ErrorActionPreference = $EA
     }
 }
+
+
+Function Get-ARTADApplications {
+    <#
+    .SYNOPSIS
+        Lists Azure AD Enterprise Applications along with their owners and Service Principals
+
+    .DESCRIPTION
+        Lists Azure AD Enterprise Applications along with their owners and Service Principals
+    #>
+
+    [CmdletBinding()]
+    Param(
+        [Parameter(Mandatory=$False)]
+        [Switch]
+        $All
+    )
+
+    try {
+        $EA = $ErrorActionPreference
+        $ErrorActionPreference = 'silentlycontinue'
+
+        $UserId = Get-ARTUserId
+        $apps = Get-AzureADApplication
+
+        $apps | % {
+            $owner = Get-AzureADApplicationOwner -ObjectId $_.ObjectId
+            $sp = Get-AzureADServicePrincipal -Filter "AppId eq '$($_.AppId)'"
+            #$spmembership = Get-AzureADServicePrincipalMembership -ObjectId $sp.ObjectId
+
+            $obj = [PSCustomObject]@{
+                ApplicationName      = $_.DisplayName
+                OwnerName            = $owner.DisplayName
+                OwnerPrincipalName   = $owner.UserPrincipalName
+                ServicePrincipalId   = $sp.ObjectId
+                ServicePrincipalType = $sp.ServicePrincipalType
+                OwnerType            = $owner.UserType
+                ApplicationId        = $_.AppId
+                OwnerId              = $owner.ObjectId
+            }
+
+            if($All) {
+                $null = $Coll.Add($obj)
+            }
+            elseif ($UserId -eq $ServicePrincipalId -or $UserId -eq $owner.ObjectId) {
+                $null = $Coll.Add($obj)
+            }
+        }
+
+        if ($Coll -ne $null) {
+            $Coll
+        }
+    }
+    catch {
+        Write-Host "[!] Function failed!" -ForegroundColor Red
+        Throw
+        Return
+    }
+    finally {
+        $ErrorActionPreference = $EA
+    }
+}
+
