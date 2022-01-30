@@ -110,7 +110,7 @@ Function Get-ARTWhoami {
     }
 
     $EA = $ErrorActionPreference
-    $ErrorActionPreference = 'silentlycontinue'
+    #$ErrorActionPreference = 'silentlycontinue'
 
     Write-Host ""
 
@@ -154,10 +154,34 @@ Function Get-ARTWhoami {
                 }
             }
 
-            $AzADCurrSess | Select Account,Environment,Tenant,TenantDomain | fl
+            $sp = $null
+            try {
+                $sp = Get-AzureADServicePrincipal | ? { $_.ServicePrincipalNames -contains $AzADCurrSess.Account }
+            }
+            catch {
+            }
+
+            if($sp -ne $null) {
+                $membership = $null
+                try {
+                    $membership = Get-AzureADServicePrincipalMembership -ObjectId $sp.ObjectId
+                }catch{}
+                
+                $AzADCurrSess | Select Account,Environment,Tenant,TenantDomain,@{Name="PrincipalType";Expression={'ServicePrincipal'}},@{Name="ApplicationName";Expression={$sp.DisplayName}},@{Name="ApplicationId";Expression={$sp.ObjectId}},@{Name="MemberOf";Expression={$membership | select -ExpandProperty DisplayName}} | fl
+            }
+            else {
+                $membership = $null
+                try {
+                    $membership = Get-AzureADUserMembership -ObjectId $AzADCurrSess.Account.Id
+                }catch{}
+
+                $AzADCurrSess | Select Account,Environment,Tenant,TenantDomain,@{Name="PrincipalType";Expression={'User'}},@{Name="MemberOf";Expression={$membership | select -ExpandProperty DisplayName}} | fl
+            }
+
 
         } catch {
             Write-Host "[!] Not authenticated to Azure AD.`n" -ForegroundColor Red
+            throw
             Write-Host ""
         }
     }
@@ -195,32 +219,26 @@ Function Get-ARTWhoami {
         Write-Host "`n=== AZ CLI context:" -ForegroundColor Yellow
         
         try {
-            az account show | Out-Null
+            $AzAcc = az account show | convertfrom-json
 
-            try {
-                $AzAcc = az account show | convertfrom-json
-
-                $Coll = New-Object System.Collections.ArrayList
-                
-                $obj = [PSCustomObject]@{
-                    Username       = $AzAcc.User.Name
-                    Usertype       = $AzAcc.User.Type
-                    TenantId       = $AzAcc.tenantId
-                    TenantName     = $AzAcc.name
-                    SubscriptionId = $AzAcc.Id
-                    Environment    = $AzAcc.EnvironmentName
-                }
-
-                $null = $Coll.Add($obj)
-                
-                $Coll | fl
-
-            } catch {
-                Write-Host "[!] Not authenticated to AZ CLI.`n" -ForegroundColor Red
-                Write-Host ""
+            $Coll = New-Object System.Collections.ArrayList
+            
+            $obj = [PSCustomObject]@{
+                Username       = $AzAcc.User.Name
+                Usertype       = $AzAcc.User.Type
+                TenantId       = $AzAcc.tenantId
+                TenantName     = $AzAcc.name
+                SubscriptionId = $AzAcc.Id
+                Environment    = $AzAcc.EnvironmentName
             }
-        }
-        catch {
+
+            $null = $Coll.Add($obj)
+            
+            $Coll | fl
+
+        } catch {
+            Write-Host "[!] Not authenticated to AZ CLI.`n" -ForegroundColor Red
+            Write-Host ""
         }
     }
     
@@ -421,6 +439,9 @@ Function Connect-ART {
     .PARAMETER TenantId
         When authenticating as a Service Principal, the Tenant ID must be specifed.
 
+    .PARAMETER Credential
+        PS Credential object containing principal credentials to connect with.
+
     .EXAMPLE
         Example 1: Authentication as a user to the Azure via Access Token:
         PS> Connect-ART -AccessToken 'eyJ0eXA...'
@@ -468,7 +489,11 @@ Function Connect-ART {
 
         [Parameter(Mandatory=$False, ParameterSetName = 'Credentials')]
         [String]
-        $TenantId
+        $TenantId,
+
+        [Parameter(Mandatory=$True, ParameterSetName = 'Credentials2')]
+        [System.Management.Automation.PSCredential]
+        $Credentials
     )
 
     try {
@@ -573,6 +598,22 @@ Function Connect-ART {
                 Parse-JWTtokenRT $AccessToken
             }
         }
+        elseif (($PsCmdlet.ParameterSetName -eq "Credentials2") -and ($Credentials -ne $null)) {
+            if($ServicePrincipal) {
+
+                Write-Verbose "Azure authentication via provided Service Principal PSCredential object..."
+
+                if($TenantId -eq $null -or $TenantId.Length -eq 0) {
+                    throw "Tenant ID not provided! Pass it in -TenantId parameter."
+                }
+
+                Connect-AzAccount -Credential $Credentials -ServicePrincipal -Tenant $TenantId
+
+            } Else {
+                Write-Verbose "Azure authentication via provided PSCredential object..."
+                Connect-AzAccount -Credential $Credentials
+            }
+        }
         else {
             $passwd = ConvertTo-SecureString $Password -AsPlainText -Force
             $creds = New-Object System.Management.Automation.PSCredential ($Username, $passwd)
@@ -635,6 +676,12 @@ Function Get-ARTUserId {
         }
 
         $UserId = (Get-AzureADUser -SearchString $name).ObjectId
+
+        if($UserId -eq $null -or $UserId.Length -eq 0) {
+            Write-Verbose "Current user is Service Principal"
+            Return ((Get-AzureADCurrentSessionInfo).Account).Id
+        }
+
         Return $UserId
     }
     catch {
@@ -860,6 +907,9 @@ Function Connect-ARTAD {
     .PARAMETER Password
         Specifies Azure AD password.
 
+    .PARAMETER Credential
+        PS Credential object containing principal credentials to connect with.
+
     .EXAMPLE
         PS> Connect-ARTAD -AccessToken 'eyJ0eXA...'
         PS> Connect-ARTAD -Username test@test.onmicrosoft.com -Password Foobar123%
@@ -881,7 +931,11 @@ Function Connect-ARTAD {
 
         [Parameter(Mandatory=$True, ParameterSetName = 'Credentials')]
         [String]
-        $Password = $null
+        $Password = $null,
+
+        [Parameter(Mandatory=$True, ParameterSetName = 'Credentials2')]
+        [System.Management.Automation.PSCredential]
+        $Credentials
     )
 
     try {
@@ -937,16 +991,16 @@ Function Connect-ARTAD {
                 Parse-JWTtokenRT $AccessToken
             }
         }
+        elseif (($PsCmdlet.ParameterSetName -eq "Credentials2") -and ($Credentials -ne $null)) {
+            Write-Verbose "Azure AD authentication via provided PSCredential object..."
+            Connect-AzureAD -Credential $Credentials
+        }
         else {
             $passwd = ConvertTo-SecureString $Password -AsPlainText -Force
             $creds = New-Object System.Management.Automation.PSCredential ($Username, $passwd)
             
             Write-Verbose "Azure AD authentication via provided creds..."
             Connect-AzureAD -Credential $creds
-
-            if(Get-Command Connect-MgGraph) {
-                Connect-MgGraph -Credential $creds
-            }
         }
     }
     catch {
