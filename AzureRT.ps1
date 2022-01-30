@@ -2551,7 +2551,7 @@ Function Get-ARTAccess {
             Write-Host "`n=== Accessible Azure Resources:`n" -ForegroundColor Yellow
             $res = Get-ARTResource -SubscriptionId $SubscriptionId
 
-            if ($res -ne $null -and $res.Length -gt 0) {
+            if ($res -ne $null) {
                 Write-Host "[+] Accessible Azure Resources & corresponding permissions:" -ForegroundColor Green
                 $res
             }
@@ -2619,29 +2619,23 @@ Function Get-ARTAccess {
                     Write-Host "[-] No resource groups available to the user." -ForegroundColor Red
                 }
                 else {
-                    $Coll = New-Object System.Collections.ArrayList
+                    $found = $false
         
                     $resourcegroups | % {
                         $deployments = Get-AzResourceGroupDeployment -ResourceGroupName $_.ResourceGroupName -ErrorAction SilentlyContinue
 
-                        $deployments | % {
-                            $obj = [PSCustomObject]@{
-                                ResourceGroupName  = $_.ResourceGroupName
-                                DeploymentName     = $_.DeploymentName
-                                Outputs            = $_.Outputs
-                                Parameters         = $_.Parameters
-                            }
+                        Write-Host "[+] Following Resource Group Deployments are available to the User:" -ForegroundColor Green
+                        $found = $true
 
-                            $null = $Coll.Add($obj)
+                        $deployments
+
+                        Write-Host "[.] Pull their deployment template JSONs using commands:" -ForegroundColor Magenta
+                        $deployments | Select ResourceGroupName,DeploymentName | % {
+                            Write-Host "`tGet-ARTResourceGroupDeploymentTemplate -ResourceGroupName $($_.ResourceGroupName) -DeploymentName $($_.DeploymentName)"
                         }
                     }
 
-                    if ($Coll -ne $null) {
-                        Write-Host "[+] Following Resource Group Deployments are available to the User:" -ForegroundColor Green
-
-                        $Coll | fl *
-                    }
-                    else {
+                    if ($found -eq $false) {
                         Write-Host "[-] User has no access to Resource Group Deployments or there were no defined." -ForegroundColor Red
                     }
                 }
@@ -2691,138 +2685,200 @@ Function Get-ARTADAccess {
         try {
             $users = Get-AzureADUser
             $UserId = Get-ARTUserId
+            $who = "User"
 
             if ($users -eq $null -or $users.Length -eq 0) {
-                Write-Host "[-] User does not have access to Azure AD." -ForegroundColor Red
+                Write-Host "[-] $who does not have access to Azure AD." -ForegroundColor Red
                 Return
             }
             
-            Write-Verbose "Step 1. Enumerating current user group membership..."
-            Write-Host "`n=== Azure AD Groups that User is member of:`n" -ForegroundColor Yellow
-            $groups = Get-AzureADUserMembership -ObjectId $UserId
+            Write-Verbose "Step 1. Enumerating current $who group membership..."
+            Write-Host "`n=== Azure AD Groups that $who is member of:`n" -ForegroundColor Yellow
 
-            if ($groups -ne $null -and $groups.Length -gt 0) {
-                Write-Host "[+] User is member of following Azure AD Groups:" -ForegroundColor Green
-                $groups | ft
+            try {
+                $sp = $null
+                try {
+                    $sp = Get-AzureADServicePrincipal | ? { $_.ServicePrincipalNames -contains $UserId }
+                }
+                catch {
+                }
+
+                $groups = $null
+
+                if($sp -ne $null) {
+                    $who = "Service Principal"
+                    Write-Host "[.] Authenticated as Service Principal." -ForegroundColor Green
+
+                    try {
+                        $groups = Get-AzureADServicePrincipalMembership -ObjectId $sp.ObjectId
+                    }catch{}
+                }
+                else {
+                    try {
+                        $groups = Get-AzureADUserMembership -ObjectId $UserId
+                    }catch{}
+                }
+
+                if ($groups -ne $null -and $groups.Length -gt 0) {
+                    Write-Host "[+] $who is member of following Azure AD Groups:" -ForegroundColor Green
+                    $groups | ft
+                }
+                else {
+                    Write-Host "[-] $who is not a member of any Azure AD Group." -ForegroundColor Red
+                }
             }
-            else {
-                Write-Host "[-] User is not a member of any Azure AD Group." -ForegroundColor Red
+            catch {
+                Write-Host "[-] $who is not a member of any Azure AD Group." -ForegroundColor Red
+                Write-Host "[-] Exception occured during Get-AzureADUserMembership:" -ForegroundColor Red
+                $Error[0].Exception.InnerException.StackTrace
             }
             
             Write-Verbose "Step 2. Checking assigned Azure AD Roles..."
-            Write-Host "`n=== Azure AD Roles assigned to current user:`n" -ForegroundColor Yellow
-            $roles = Get-ARTADRoleAssignment
+            Write-Host "`n=== Azure AD Roles assigned to current $($who):`n" -ForegroundColor Yellow
+            try {
+                $roles = Get-ARTADRoleAssignment
 
-            if ($roles -ne $null -and $roles.Length -gt 0) {
-                Write-Host "[+] Azure AD Roles Assigned:" -ForegroundColor Green
-                $roles | ft
-            }
-            else {
-                #Write-Host "[-] User does not have any Azure AD Roles assigned." -ForegroundColor Red
+                if ($roles -ne $null -and $roles.Length -gt 0) {
+                    Write-Host "[+] Azure AD Roles Assigned:" -ForegroundColor Green
+                    $roles | ft
+                }
+                else {
+                    #Write-Host "[-] $who does not have any Azure AD Roles assigned." -ForegroundColor Red
 
-                try {
-                    if(Get-Command Get-MGContext) {
-                        $users = Get-MgUser -ErrorAction SilentlyContinue
+                    try {
+                        if(Get-Command Get-MGContext) {
+                            $users = Get-MgUser -ErrorAction SilentlyContinue
 
-                        if ($users -eq $null -or $users.Length -eq 0) {
-                            Write-Verbose "[-] User does not have access to Microsoft.Graph either." -ForegroundColor Red
-                        }
-                        else {
-                            $roles = Get-ARTADRoleAssignment
-                            if ($roles -ne $null -and $roles.Length -gt 0) {
-                                Write-Host "[+] However user does have access via Microsoft Graph to Azure AD - and these are his Roles Assigned:" -ForegroundColor Green
-                                $roles | ft
+                            if ($users -eq $null -or $users.Length -eq 0) {
+                                Write-Verbose "[-] $who does not have access to Microsoft.Graph either." -ForegroundColor Red
+                            }
+                            else {
+                                $roles = Get-ARTADRoleAssignment
+                                if ($roles -ne $null -and $roles.Length -gt 0) {
+                                    Write-Host "[+] However user does have access via Microsoft Graph to Azure AD - and these are his Roles Assigned:" -ForegroundColor Green
+                                    $roles | ft
+                                }
                             }
                         }
                     }
+                    catch {
+                        Write-Verbose "[-] Could not enumerate Azure AD Roles via Microsoft.Graph either."
+                    }
                 }
-                catch {
-                    Write-Verbose "[-] Could not enumerate Azure AD Roles via Microsoft.Graph either."
-                }
+            }
+            catch {
+                Write-Host "[-] Exception occured during Get-ARTADRoleAssignment:" -ForegroundColor Red
+                $Error[0].Exception.InnerException.StackTrace
             }
 
             Write-Verbose "Step 3. Checking Azure AD Scoped Roles..."
-            Write-Host "`n=== Azure AD Scoped Roles assigned to current user:`n" -ForegroundColor Yellow
-            $roles = Get-ARTADScopedRoleAssignment
+            Write-Host "`n=== Azure AD Scoped Roles assigned to current $($who):`n" -ForegroundColor Yellow
+            try {
+                $roles = Get-ARTADScopedRoleAssignment
 
-            if ($roles -ne $null ) {
-                Write-Host "[+] Azure AD Scoped Roles Assigned:" -ForegroundColor Green
-                $roles | ft
+                if ($roles -ne $null ) {
+                    Write-Host "[+] Azure AD Scoped Roles Assigned:" -ForegroundColor Green
+                    $roles | ft
+                }
+                else {
+                    #Write-Host "[-] $who does not have any Azure AD Scoped Roles assigned." -ForegroundColor Red
+                }
             }
-            else {
-                #Write-Host "[-] User does not have any Azure AD Scoped Roles assigned." -ForegroundColor Red
+            catch {
+                Write-Host "[-] Exception occured during Get-ARTADScopedRoleAssignment:" -ForegroundColor Red
+                $Error[0].Exception.InnerException.StackTrace
             }
 
             Write-Verbose "Step 4. Checking Azure AD Applications owned..."
-            Write-Host "`n=== Azure AD Applications Owned By Current User:`n" -ForegroundColor Yellow
-            $apps = Get-ARTADApplications
+            Write-Host "`n=== Azure AD Applications Owned By Current $($who):`n" -ForegroundColor Yellow
+            try {
+                $apps = Get-ARTADApplications
 
-            if ($apps -ne $null ) {
-                Write-Host "[+] Azure AD Applications Owned:" -ForegroundColor Green
-                $apps | fl
+                if ($apps -ne $null ) {
+                    Write-Host "[+] Azure AD Applications Owned:" -ForegroundColor Green
+                    $apps | fl
+                }
+                else {
+                    Write-Host "[-] $who does not own any Azure AD Application." -ForegroundColor Red
+                }
             }
-            else {
-                Write-Host "[-] User does not own any Azure AD Application." -ForegroundColor Red
+            catch {
+                Write-Host "[-] $who does not own any Azure AD Application." -ForegroundColor Red
+                Write-Host "[-] Exception occured during Get-ARTADApplications:" -ForegroundColor Red
+                $Error[0].Exception.InnerException.StackTrace
             }
 
             Write-Verbose "Step 4. Examining Administrative Units..."
             Write-Host "`n=== Azure AD Administrative Units:`n" -ForegroundColor Yellow
             
             $Coll = New-Object System.Collections.ArrayList
-            $units = Get-AzureADMSAdministrativeUnit
+            try {
+                $units = Get-AzureADMSAdministrativeUnit
 
-            $units | % {
-                Write-Verbose "Enumerating unit `"$($_.DisplayName)`" ..."
-                $members = Get-AzureADMSAdministrativeUnitMember -Id $_.Id
- 
-                $obj = [PSCustomObject]@{
-                    AdministrativeUnit   = $_.DisplayName
-                    MembersCount         = $members.Length
-                    Description          = $_.Description
-                    AdministrativeUnitId = $_.Id
+                $units | % {
+                    Write-Verbose "Enumerating unit `"$($_.DisplayName)`" ..."
+                    $members = Get-AzureADMSAdministrativeUnitMember -Id $_.Id
+     
+                    $obj = [PSCustomObject]@{
+                        AdministrativeUnit   = $_.DisplayName
+                        MembersCount         = $members.Length
+                        Description          = $_.Description
+                        AdministrativeUnitId = $_.Id
+                    }
+
+                    $null = $Coll.Add($obj)
                 }
 
-                $null = $Coll.Add($obj)
+                if ($Coll -ne $null) {
+                    Write-Host "[+] Azure AD Administrative Units:" -ForegroundColor Green
+                    $Coll | sort -property MembersCount -Descending | ft
+                }
+                else {
+                    Write-Host "[-] Could not list Azure AD Administrative Units." -ForegroundColor Red
+                }
             }
-
-            if ($Coll -ne $null) {
-                Write-Host "[+] Azure AD Administrative Units:" -ForegroundColor Green
-                $Coll | sort -property MembersCount -Descending | ft
-            }
-            else {
+            catch {
                 Write-Host "[-] Could not list Azure AD Administrative Units." -ForegroundColor Red
+                Write-Host "[-] Exception occured during Get-AzureADMSAdministrativeUnit:" -ForegroundColor Red
+                $Error[0].Exception.InnerException.StackTrace
             }
-
 
             Write-Verbose "Step 5. Checking Azure AD Roles that are In-Use..."
             Write-Host "`n=== Azure AD Roles Assigned In Tenant To Different Users:`n" -ForegroundColor Yellow
             
             $Coll = New-Object System.Collections.ArrayList
-            $azureadroles = Get-AzureADDirectoryRole
+            try {
+                $azureadroles = Get-AzureADDirectoryRole
 
-            $azureadroles | % {
-                Write-Verbose "Enumerating role `"$($_.DisplayName)`" ..."
-                $members = Get-AzureADDirectoryRoleMember -ObjectId $_.ObjectId
-            
-                $RoleName = $_.DisplayName
-                $RoleId = $_.ObjectId
- 
-                $obj = [PSCustomObject]@{
-                    RoleName     = $RoleName
-                    MembersCount = $members.Length
-                    IsCustom     = -not $_.IsSystem
-                    RoleId       = $RoleId
+                $azureadroles | % {
+                    Write-Verbose "Enumerating role `"$($_.DisplayName)`" ..."
+                    $members = Get-AzureADDirectoryRoleMember -ObjectId $_.ObjectId
+                
+                    $RoleName = $_.DisplayName
+                    $RoleId = $_.ObjectId
+     
+                    $obj = [PSCustomObject]@{
+                        RoleName     = $RoleName
+                        MembersCount = $members.Length
+                        IsCustom     = -not $_.IsSystem
+                        RoleId       = $RoleId
+                    }
+
+                    $null = $Coll.Add($obj)
                 }
 
-                $null = $Coll.Add($obj)
+                if ($Coll -ne $null) {
+                    Write-Host "[+] Azure AD Roles In-Use:" -ForegroundColor Green
+                    $Coll | sort -property MembersCount -Descending | ft
+                }
+                else {
+                    Write-Host "[-] Could not list Azure AD Roles In-Use." -ForegroundColor Red
+                }
             }
-
-            if ($Coll -ne $null) {
-                Write-Host "[+] Azure AD Roles In-Use:" -ForegroundColor Green
-                $Coll | sort -property MembersCount -Descending | ft
-            }
-            else {
+            catch {
                 Write-Host "[-] Could not list Azure AD Roles In-Use." -ForegroundColor Red
+                Write-Host "[-] Exception occured during Get-AzureADDirectoryRoleMember:" -ForegroundColor Red
+                $Error[0].Exception.InnerException.StackTrace
             }
         }
         catch {
@@ -3242,3 +3298,111 @@ Function Get-ARTADApplications {
     }
 }
 
+
+Function Get-ARTResourceGroupDeploymentTemplate {
+    <#
+    .SYNOPSIS
+        Displays Resource Group Deployment Template JSON
+
+    .DESCRIPTION
+        Displays Resource Group Deployment Template JSON based on input parameters, or pulls all of them at once.
+
+    .PARAMETER ResourceGroupName
+        Resource Group Name to pull deployment templates. When not given, will display all templates from all resource groups.
+
+    .PARAMETER DeploymentName
+        Deployment Name to show its template. When not given, will display all templates from all deployments.
+
+    .EXAMPLE
+        Example 1: Shows all visible to current user Azure AD applications, their owners and Service Principals.
+        PS C:\> Get-ARTResourceGroupDeploymentTemplate
+    #>
+
+    [CmdletBinding()]
+    Param(
+        [Parameter(Mandatory=$False)]
+        [String]
+        $ResourceGroupName = $null,
+
+        [Parameter(Mandatory=$False)]
+        [String]
+        $DeploymentName = $null
+    )
+
+    try {
+        $EA = $ErrorActionPreference
+        $ErrorActionPreference = 'silentlycontinue'
+
+        $tmpfile = New-TemporaryFile
+        $jsonfile = "$($tmpfile.FullName).json"
+
+        if (($ResourceGroupName -ne $null -and $ResourceGroupName.Length -gt 0) -and ($DeploymentName -ne $null -and $DeploymentName.Length -gt 0)) {
+            Save-AzResourceGroupDeploymentTemplate -ResourceGroupName $ResourceGroupName -DeploymentName $DeploymentName -Path $tmpfile.FullName
+
+            Write-Host "`n===================[ Resource Group Deployment Template: $ResourceGroupName - $DeploymentName ]=================================`n" -ForegroundColor Green
+            
+            cat $jsonfile
+            Clear-Content $tmpfile.FullName
+            Clear-Content $jsonfile
+
+            Write-Host "`n============================================================================================================================`n" -ForegroundColor Green
+        }
+        elseif(($ResourceGroupName -ne $null -and $ResourceGroupName.Length -gt 0) -and ($DeploymentName -eq $null)) {
+            Get-AzResourceGroupDeployment -ResourceGroupName $ResourceGroupName | % {
+                Save-AzResourceGroupDeploymentTemplate -ResourceGroupName $ResourceGroupName -DeploymentName $_.DeploymentName -Path $tmpfile.FullName | Out-Null
+
+                Write-Host "`n===================[ Resource Group Deployment Template: $ResourceGroupName - $($_.DeploymentName) ]=================================`n" -ForegroundColor Green
+                
+                cat $jsonfile
+                Clear-Content $tmpfile.FullName
+                Clear-Content $jsonfile
+
+                Write-Host "`n============================================================================================================================`n" -ForegroundColor Green
+            }
+        }
+        elseif(($ResourceGroupName -eq $null) -and ($DeploymentName -ne $null -and $DeploymentName.Length -gt 0)) {
+            Get-AzResourceGroup | % {
+                $ResourceGroupName = $_.ResourceGroupName
+                Get-AzResourceGroupDeployment -ResourceGroupName $ResourceGroupName | ? {$_.DeploymentName -eq $DeploymentName} | % {
+                    Save-AzResourceGroupDeploymentTemplate -ResourceGroupName $ResourceGroupName -DeploymentName $_.DeploymentName -Path $tmpfile.FullName | Out-Null
+
+                    Write-Host "`n===================[ Resource Group Deployment Template: $ResourceGroupName - $DeploymentName ]=================================`n" -ForegroundColor Green
+                    
+                    cat $jsonfile
+                    Clear-Content $tmpfile.FullName
+                    Clear-Content $jsonfile
+
+                    Write-Host "`n============================================================================================================================`n" -ForegroundColor Green
+                }
+            }
+        }
+        else {
+            Get-AzResourceGroup | % {
+                $ResourceGroupName = $_.ResourceGroupName
+                Get-AzResourceGroupDeployment -ResourceGroupName $ResourceGroupName | % {
+                    $DeploymentName = $_.DeploymentName
+                    Save-AzResourceGroupDeploymentTemplate -ResourceGroupName $ResourceGroupName -DeploymentName $DeploymentName -Path $tmpfile.FullName | Out-Null
+
+                    Write-Host "`n===================[ Resource Group Deployment Template: $ResourceGroupName - $DeploymentName ]=================================`n" -ForegroundColor Green
+                    
+                    cat $jsonfile
+                    Clear-Content $tmpfile.FullName
+                    Clear-Content $jsonfile
+
+                    Write-Host "`n============================================================================================================================`n" -ForegroundColor Green
+                }
+            }
+        }
+    }
+    catch {
+        Write-Host "[!] Function failed!" -ForegroundColor Red
+        Throw
+        Return
+    }
+    finally {
+        Remove-Item -Path $tmpfile.FullName | Out-Null
+        Remove-Item -Path $jsonfile | Out-Null
+
+        $ErrorActionPreference = $EA
+    }   
+}

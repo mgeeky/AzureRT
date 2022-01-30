@@ -107,6 +107,8 @@ PS C:\> Get-Help Connect-ART
 
 - **`Get-ARTAzureVMPublicIP`** - Retrieves Azure VM Public IP address
 
+- **`Get-ARTResourceGroupDeploymentTemplate`** - Displays Resource Group Deployment Template JSON based on input parameters, or pulls all of them at once.
+
 
 ### Privilege Escalation
 
