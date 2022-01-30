@@ -2687,35 +2687,28 @@ Function Get-ARTADAccess {
                 }
             }
 
-            Write-Verbose "Step 3. Checking Azure AD Roles that are In-Use..."
-            Write-Host "`n=== Azure AD Roles Assigned In Tenant To Different Users:`n" -ForegroundColor Yellow
-            
-            $Coll = New-Object System.Collections.ArrayList
-            $azureadroles = Get-AzureADDirectoryRole
+            Write-Verbose "Step 3. Checking Azure AD Scoped Roles..."
+            Write-Host "`n=== Azure AD Scoped Roles assigned to current user:`n" -ForegroundColor Yellow
+            $roles = Get-ARTADScopedRoleAssignment
 
-            $azureadroles | % {
-                Write-Verbose "Enumerating role `"$($_.DisplayName)`" ..."
-                $members = Get-AzureADDirectoryRoleMember -ObjectId $_.ObjectId
-            
-                $RoleName = $_.DisplayName
-                $RoleId = $_.ObjectId
- 
-                $obj = [PSCustomObject]@{
-                    RoleName     = $RoleName
-                    MembersCount = $members.Length
-                    IsCustom     = -not $_.IsSystem
-                    RoleId       = $RoleId
-                }
-
-                $null = $Coll.Add($obj)
-            }
-
-            if ($Coll -ne $null) {
-                Write-Host "[+] Azure AD Roles In-Use:" -ForegroundColor Green
-                $Coll | sort -property MembersCount -Descending | ft
+            if ($roles -ne $null ) {
+                Write-Host "[+] Azure AD Scoped Roles Assigned:" -ForegroundColor Green
+                $roles | ft
             }
             else {
-                Write-Host "[-] Could not list Azure AD Roles In-Use." -ForegroundColor Red
+                #Write-Host "[-] User does not have any Azure AD Scoped Roles assigned." -ForegroundColor Red
+            }
+
+            Write-Verbose "Step 4. Checking Azure AD Applications owned..."
+            Write-Host "`n=== Azure AD Applications Owned By Current User:`n" -ForegroundColor Yellow
+            $apps = Get-ARTADApplications
+
+            if ($apps -ne $null ) {
+                Write-Host "[+] Azure AD Applications Owned:" -ForegroundColor Green
+                $apps | fl
+            }
+            else {
+                Write-Host "[-] User does not own any Azure AD Application." -ForegroundColor Red
             }
 
             Write-Verbose "Step 4. Examining Administrative Units..."
@@ -2746,16 +2739,36 @@ Function Get-ARTADAccess {
                 Write-Host "[-] Could not list Azure AD Administrative Units." -ForegroundColor Red
             }
 
-            Write-Verbose "Step 4. Checking Azure AD Scoped Roles..."
-            Write-Host "`n=== Azure AD Scoped Roles assigned to current user:`n" -ForegroundColor Yellow
-            $roles = Get-ARTADScopedRoleAssignment
 
-            if ($roles -ne $null ) {
-                Write-Host "[+] Azure AD Scoped Roles Assigned:" -ForegroundColor Green
-                $roles | ft
+            Write-Verbose "Step 5. Checking Azure AD Roles that are In-Use..."
+            Write-Host "`n=== Azure AD Roles Assigned In Tenant To Different Users:`n" -ForegroundColor Yellow
+            
+            $Coll = New-Object System.Collections.ArrayList
+            $azureadroles = Get-AzureADDirectoryRole
+
+            $azureadroles | % {
+                Write-Verbose "Enumerating role `"$($_.DisplayName)`" ..."
+                $members = Get-AzureADDirectoryRoleMember -ObjectId $_.ObjectId
+            
+                $RoleName = $_.DisplayName
+                $RoleId = $_.ObjectId
+ 
+                $obj = [PSCustomObject]@{
+                    RoleName     = $RoleName
+                    MembersCount = $members.Length
+                    IsCustom     = -not $_.IsSystem
+                    RoleId       = $RoleId
+                }
+
+                $null = $Coll.Add($obj)
+            }
+
+            if ($Coll -ne $null) {
+                Write-Host "[+] Azure AD Roles In-Use:" -ForegroundColor Green
+                $Coll | sort -property MembersCount -Descending | ft
             }
             else {
-                #Write-Host "[-] User does not have any Azure AD Scoped Roles assigned." -ForegroundColor Red
+                Write-Host "[-] Could not list Azure AD Roles In-Use." -ForegroundColor Red
             }
         }
         catch {
@@ -3111,26 +3124,41 @@ Function Get-ARTADApplications {
     )
 
     try {
-        $EA = $ErrorActionPreference
-        $ErrorActionPreference = 'silentlycontinue'
+        #$EA = $ErrorActionPreference
+        #$ErrorActionPreference = 'silentlycontinue'
 
         $UserId = Get-ARTUserId
-        $apps = Get-AzureADApplication
+        $apps = Get-AzureADApplication -All $true
 
-        $apps | % {
-            $owner = Get-AzureADApplicationOwner -ObjectId $_.ObjectId
-            $sp = Get-AzureADServicePrincipal -Filter "AppId eq '$($_.AppId)'"
-            #$spmembership = Get-AzureADServicePrincipalMembership -ObjectId $sp.ObjectId
+        $Coll = New-Object System.Collections.ArrayList
+
+        foreach ($app in $apps) {
+            $owner = Get-AzureADApplicationOwner -ObjectId $app.ObjectId
+            $sp = Get-AzureADServicePrincipal -Filter "AppId eq '$($app.AppId)'"
+            $spmembership1 = Get-AzureADServicePrincipalMembership -ObjectId $sp.ObjectId
+
+            $spgroups = New-Object System.Collections.ArrayList
+
+            foreach($sp in $spmembership1) {
+                $obj = [PSCustomObject]@{
+                    GroupName = $sp.DisplayName
+                    GroupId   = $sp.ObjectId
+                    GroupType = $sp.ObjectType
+                }
+
+                $null = $spgroups.Add($obj)                
+            }
 
             $obj = [PSCustomObject]@{
-                ApplicationName      = $_.DisplayName
+                ApplicationName      = $app.DisplayName
+                ApplicationId        = $app.AppId
                 OwnerName            = $owner.DisplayName
                 OwnerPrincipalName   = $owner.UserPrincipalName
+                OwnerType            = $owner.UserType
+                OwnerId              = $owner.ObjectId
                 ServicePrincipalId   = $sp.ObjectId
                 ServicePrincipalType = $sp.ServicePrincipalType
-                OwnerType            = $owner.UserType
-                ApplicationId        = $_.AppId
-                OwnerId              = $owner.ObjectId
+                ServicePrincipalMembership = $spgroups
             }
 
             if($All) {
@@ -3141,9 +3169,7 @@ Function Get-ARTADApplications {
             }
         }
 
-        if ($Coll -ne $null) {
-            $Coll
-        }
+        Return $Coll
     }
     catch {
         Write-Host "[!] Function failed!" -ForegroundColor Red
