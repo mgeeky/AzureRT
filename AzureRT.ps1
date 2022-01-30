@@ -3164,10 +3164,17 @@ Function Set-ARTADUserPassword {
 Function Get-ARTADApplications {
     <#
     .SYNOPSIS
-        Lists Azure AD Enterprise Applications along with their owners and Service Principals
+        Lists Azure AD Enterprise Applications that current user is owner of or owned by all users
 
     .DESCRIPTION
-        Lists Azure AD Enterprise Applications along with their owners and Service Principals
+        Lists Azure AD Enterprise Applications that current user is owner of (or all existing when -All used) along with their owners and Service Principals
+
+    .PARAMETER All
+        Display all Azure AD role assignments. By default will show only applications that the current user is owner of.
+
+    .EXAMPLE
+        Example 1: Shows all visible to current user Azure AD applications, their owners and Service Principals.
+        PS C:\> Get-ARTADApplications -All
     #>
 
     [CmdletBinding()]
@@ -3178,8 +3185,8 @@ Function Get-ARTADApplications {
     )
 
     try {
-        #$EA = $ErrorActionPreference
-        #$ErrorActionPreference = 'silentlycontinue'
+        $EA = $ErrorActionPreference
+        $ErrorActionPreference = 'silentlycontinue'
 
         $UserId = Get-ARTUserId
         $apps = Get-AzureADApplication -All $true

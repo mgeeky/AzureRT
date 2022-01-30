@@ -99,6 +99,8 @@ PS C:\> Get-Help Connect-ART
 
 - **`Get-ARTADRolePermissions`** - Displays all granted permissions on a specified Azure AD role.
 
+- **`Get-ARTADApplications`** - Lists Azure AD Enterprise Applications that current user is owner of (or all existing when -All used) along with their owners and Service Principals
+
 - **`Get-ARTKeyVaultSecrets`** - Lists all available Azure Key Vault secrets. This cmdlet assumes that requesting user connected to the Azure AD with KeyVaultAccessToken (scoped to https://vault.azure.net) and has "Key Vault Secrets User" role assigned (or equivalent).
 
 - **`Get-ARTAutomationRunbookCode`** - Invokes REST API method to pull specified Runbook's source code.
