@@ -136,7 +136,13 @@ PS C:\> Get-Help Connect-ART
 
 ### Misc
 
+- **`Get-ARTPRTToken`** - Retrieves Current user's PRT (Primary Refresh Token) value using [Dirk-Jan Mollema's ROADtoken](https://github.com/dirkjanm/ROADtoken)
+
+- **`Get-ARTPRTNonce`** - Retrieves Current user's PRT (Primary Refresh Token) nonce value
+
 - **`Get-ARTUserId`** - Acquires current user or user specified in parameter ObjectId via `Az` module
+
+- **`Get-ARTTenantID`** - Retrieves Current user's Tenant ID
 
 - **`Get-ARTSubscriptionId`** - Helper that collects current Subscription ID.
 

