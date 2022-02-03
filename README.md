@@ -30,9 +30,10 @@ Before one starts crafting around Azure, following commands may be used to prepa
 ```
 Install-Module Az -Force -Confirm -AllowClobber -Scope CurrentUser
 Install-Module AzureAD -Force -Confirm -AllowClobber -Scope CurrentUser
-Install-Module Microsoft.Graph -Force -Confirm -AllowClobber -Scope CurrentUser
-Install-Module MSOnline -Force -Confirm -AllowClobber -Scope CurrentUser
-Install-Module AzureADPreview -Force -Confirm -AllowClobber -Scope CurrentUser
+Install-Module Microsoft.Graph -Force -Confirm -AllowClobber -Scope CurrentUser # OPTIONAL
+Install-Module MSOnline -Force -Confirm -AllowClobber -Scope CurrentUser        # OPTIONAL
+Install-Module AzureADPreview -Force -Confirm -AllowClobber -Scope CurrentUser  # OPTIONAL
+Install-Module AADInternals -Force -Confirm -AllowClobber -Scope CurrentUser    # OPTIONAL
 ```
 
 Even though only first two modules are required by `AzureRT`, its good to have others pre-installed too.
@@ -76,6 +77,8 @@ PS C:\> Get-Help Connect-ART
 
 - **`Get-ARTAccessTokenAzureAD`** - Gets an access token from Azure Active Directory. Authored by [Simon Wahlin, @SimonWahlin ](https://blog.simonw.se/getting-an-access-token-for-azuread-using-powershell-and-device-login-flow/)
 
+- **`Get-ARTAccessTokenAzureADCached`** - Attempts to retrieve locally cached AzureAD access token (https://graph.microsoft.com), stored after `Connect-AzureAD` occurred.
+
 - **`Remove-ARTServicePrincipalKey`** - Performs cleanup actions after running `Connect-ARTADServicePrincipal`
 
 
@@ -98,6 +101,8 @@ PS C:\> Get-Help Connect-ART
 - **`Get-ARTRolePermissions`** - Displays all granted permissions on a specified Azure RBAC role.
 
 - **`Get-ARTADRolePermissions`** - Displays all granted permissions on a specified Azure AD role.
+
+- **`Get-ARTADDynamicGroups`** - Displays Azure AD Dynamic Groups along with their user Membership Rules, members count and current user membership status
 
 - **`Get-ARTADApplications`** - Lists Azure AD Enterprise Applications that current user is owner of (or all existing when -All used) along with their owners and Service Principals
 
@@ -131,7 +136,7 @@ PS C:\> Get-Help Connect-ART
 
 - **`Update-ARTAzVMUserData`** - Modifies Azure VM User Data script through a direct API invocation.
 
-- **`Set-ARTAzVMExtension`** - Modifies Azure VM Custom Script Extension leading to remote code execution.
+- **`Invoke-ARTCustomScriptExtension`** - Creates new or modifies Azure VM Custom Script Extension leading to remote code execution.
 
 
 ### Misc
@@ -149,6 +154,8 @@ PS C:\> Get-Help Connect-ART
 - **`Parse-JWTtokenRT`** - Parses input JWT token and prints it out nicely.
 
 - **`Invoke-ARTGETRequest`** - Takes Access Token and invokes GET REST method API request against a specified URI. It also verifies whether provided token has required audience set.
+
+- **`Import-ARTModules`** - Installs & Imports required & optional Powershell modules for Azure Red Team activities
 
 
 ---
