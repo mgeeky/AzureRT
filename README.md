@@ -88,6 +88,8 @@ PS C:\> Get-Help Connect-ART
 
 - **`Get-ARTADAccess`** - Performs Azure AD Situational Awareness.
 
+- **`Get-ARTTenants`** - List Tenants available for the currently authenticated user (or the one based on supplied Access Token)
+
 - **`Get-ARTDangerousPermissions`** - Analyzes accessible Azure Resources and associated permissions user has on them to find all the Dangerous ones that could be abused by an attacker.
 
 - **`Get-ARTResource`** - Authenticates to the https://management.azure.com using provided Access Token and pulls accessible resources and permissions that token Owner have against them.
@@ -118,6 +120,8 @@ PS C:\> Get-Help Connect-ART
 
 
 ### Privilege Escalation
+
+- **`Add-ARTADGuestUser`** - Sends Azure AD Guest user invitation e-mail, allowing to expand access to AAD tenant for the external attacker & returns Invite Redeem URL used to easily accept the invitation.
 
 - **`Set-ARTADUserPassword`** - Abuses `Authentication Administrator` Role Assignment to reset other non-admin users password.
 

