@@ -2888,7 +2888,7 @@ Function Get-ARTADAccess {
             Write-Verbose "Step 4. Checking Azure AD Applications owned..."
             Write-Host "`n=== (4) Azure AD Applications Owned By Current $($who):`n" -ForegroundColor Yellow
             try {
-                $apps = Get-ARTADApplication
+                $apps = Get-ARTApplication
 
                 if ($apps -ne $null ) {
                     Write-Host "[+] Azure AD Applications Owned:" -ForegroundColor Green
@@ -2900,7 +2900,7 @@ Function Get-ARTADAccess {
             }
             catch {
                 Write-Host "[-] $who does not own any Azure AD Application." -ForegroundColor Red
-                Write-Host "[-] Exception occured during Get-ARTADApplication:" -ForegroundColor Red
+                Write-Host "[-] Exception occured during Get-ARTApplication:" -ForegroundColor Red
                 $Error[0].Exception.InnerException.StackTrace
             }
 
@@ -2999,7 +2999,7 @@ Function Get-ARTADAccess {
             Write-Verbose "Step 8. Checking Azure AD Application Proxies..."
             Write-Host "`n=== (8) Azure AD Application Proxies (be patient, this takes more time...):`n" -ForegroundColor Yellow
             try {
-                $apps = Get-ARTADApplicationProxy
+                $apps = Get-ARTApplicationProxy
 
                 if ($apps -ne $null ) {
                     Write-Host "[+] Azure AD Application Proxies:" -ForegroundColor Green
@@ -3011,7 +3011,7 @@ Function Get-ARTADAccess {
             }
             catch {
                 Write-Host "[-] Could not find Azure AD Application Proxy." -ForegroundColor Red
-                Write-Host "[-] Exception occured during Get-ARTADApplicationProxy:" -ForegroundColor Red
+                Write-Host "[-] Exception occured during Get-ARTApplicationProxy:" -ForegroundColor Red
                 $Error[0].Exception.InnerException.StackTrace
             }
         }
@@ -3360,7 +3360,136 @@ Function Set-ARTADUserPassword {
 }
 
 
-Function Get-ARTADApplicationProxy {
+Function Get-ARTApplicationProxyPrincipals {
+    <#
+    .SYNOPSIS
+        Displays users and groups assigned to the specified Application Proxy application.
+
+    .DESCRIPTION
+        Displays users and groups assigned to the specified Application Proxy application.
+        Requires Azure AD role: Global Administrator or Application Administrator
+
+        Copied from Nikhil Mittal's Azure AD Attacking & Defending Bootcamp
+        who in turn copied that script from:
+            https://docs.microsoft.com/en-us/azure/active-directory/manage-apps/scripts/powershell-display-users-group-of-app
+
+    .PARAMETER ObjectId
+        Specifies Service Principal object ID that should be inspected.
+
+    .EXAMPLE
+        PS C:\> Get-ARTApplicationProxyPrincipals -ObjectId $Id
+    #>
+
+    [CmdletBinding()]
+    Param(
+        [Parameter(Mandatory=$False)]
+        [String]
+        $ObjectId = $null
+    )
+
+    try {
+        $EA = $ErrorActionPreference
+        $ErrorActionPreference = 'silentlycontinue'
+
+        $aadapServPrincObjId = $ObjectId
+
+        try { 
+            $app = Get-AzureADServicePrincipal -ObjectId $aadapServPrincObjId
+        }
+        catch {
+            Write-Host "[-] Possibly the ObjectId is incorrect." -ForegroundColor Red
+            Write-Host " "
+            Return
+        }
+
+        $obj = [PSCustomObject]@{
+            AppDisplayName     = $app.DisplayName
+            ServicePrincipalId = $aadapServPrincObjId
+        }
+
+        Write-Host "=== Application:" -ForegroundColor Yellow
+        
+        $obj | fl
+
+        Write-Host "=== Assigned (directly and through group membership) users:" -ForegroundColor Yellow
+        
+        Write-Verbose "1. Reading users. This operation might take longer..."
+
+        $number = 0
+        $Coll = New-Object System.Collections.ArrayList
+        $users = Get-AzureADUser -All $true
+
+        foreach ($item in $users) {
+            $listOfAssignments = Get-AzureADUserAppRoleAssignment -ObjectId $item.ObjectId
+            $assigned = $false
+
+            foreach ($item2 in $listOfAssignments) { 
+                If ($item2.ResourceID -eq $aadapServPrincObjId) { 
+                    $assigned = $true 
+                } 
+            }
+
+            If ($assigned -eq $true) {
+                $obj = [PSCustomObject]@{
+                    DisplayName       = $item.DisplayName
+                    UserPrincipalName = $item.UserPrincipalName
+                    ObjectId          = $item.ObjectId
+                }
+
+                $null = $Coll.Add($obj)
+                $number = $number + 1
+            }
+        }
+
+        $Coll | ft
+
+        Write-Host "Number of (directly and through group membership) users: $number" -ForegroundColor Green
+        
+        Write-Host "`n`n=== Assigned groups:" -ForegroundColor Yellow
+
+        Write-Verbose "2. Reading groups. This operation might take longer..."
+
+        $number = 0
+        $Coll2 = New-Object System.Collections.ArrayList
+        $groups = Get-AzureADGroup -All $true
+
+        foreach ($item in $groups) {
+            $listOfAssignments = Get-AzureADGroupAppRoleAssignment -ObjectId $item.ObjectId
+            $assigned = $false
+
+            foreach ($item2 in $listOfAssignments) { 
+                If ($item2.ResourceID -eq $aadapServPrincObjId) { 
+                    $assigned = $true 
+                } 
+            }
+
+            If ($assigned -eq $true) {
+                $obj = [PSCustomObject]@{
+                    DisplayName       = $item.DisplayName
+                    ObjectId          = $item.ObjectId
+                }
+
+                $null = $Coll2.Add($obj)
+                $number = $number + 1
+            }
+        }
+
+        $Coll2 | ft
+
+        Write-Host "Number of assigned groups: $number" -ForegroundColor Green
+    }
+    catch {
+        Write-Host "[!] Function failed!" -ForegroundColor Red
+        Throw
+        Return
+    }
+    finally {
+        $ErrorActionPreference = $EA
+    }
+}
+
+
+Function Get-ARTApplicationProxy {
     <#
     .SYNOPSIS
         Lists Azure AD Enterprise Applications that have Application Proxy setup.
@@ -3373,10 +3502,10 @@ Function Get-ARTADApplicationProxy {
 
     .EXAMPLE
         Example 1: Shows all visible to current user Azure AD application proxies.
-        PS C:\> Get-ARTADApplicationProxy
+        PS C:\> Get-ARTApplicationProxy
 
         Example 2: Shows specific Application's Proxy
-        PS C:\> Get-ARTADApplicationProxy -ObjectId $Id
+        PS C:\> Get-ARTApplicationProxy -ObjectId $Id
     #>
 
     [CmdletBinding()]
@@ -3443,7 +3572,7 @@ Function Get-ARTADApplicationProxy {
 }
 
 
-Function Get-ARTADApplication {
+Function Get-ARTApplication {
     <#
     .SYNOPSIS
         Lists Azure AD Enterprise Applications that current user is owner of or owned by all users
@@ -3459,10 +3588,10 @@ Function Get-ARTADApplication {
 
     .EXAMPLE
         Example 1: Shows all visible to current user Azure AD applications, their owners and Service Principals.
-        PS C:\> Get-ARTADApplication -All
+        PS C:\> Get-ARTApplication -All
 
         Example 2: Examine specific application based on their ObjectId
-        PS C:\> Get-ARTADApplication -ObjectId $Id
+        PS C:\> Get-ARTApplication -ObjectId $Id
     #>
 
     [CmdletBinding()]
@@ -3514,7 +3643,7 @@ Function Get-ARTADApplication {
             }
 
             if($ObjectIdGiven) {
-                $out = Get-ARTADApplicationProxy -ObjectId $ObjectId
+                $out = Get-ARTApplicationProxy -ObjectId $ObjectId
 
                 $obj = [PSCustomObject]@{
                     ApplicationName      = $app.DisplayName
@@ -3558,7 +3687,7 @@ Function Get-ARTADApplication {
         }
 
         if($count -eq 0) {
-            Write-Warning "No applications that this user is owner of. Try running Get-ARTADApplication -All to see all applications."
+            Write-Warning "No applications that this user is owner of. Try running Get-ARTApplication -All to see all applications."
         }
 
         Return $Coll
