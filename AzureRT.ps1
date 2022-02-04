@@ -46,6 +46,8 @@ $KnownDangerousPermissions = @{
     'vaults/keys/`*'                           = 'User can access Key Vault Keys'
     'vaults/secrets/`*'                        = 'User can access Key Vault Keys'
 
+    'microsoft.directory/users/inviteGuest'    = 'Can invite Guest Users to Azure AD Tenant'
+
     'automationAccounts/`*'                    = 'Allows User to compromise Azure VM & Hybrid machines through Azure Automation Runbooks'
     'automationAccounts/jobs/`*'               = 'Allows User to compromise Azure VM & Hybrid machines through Azure Automation Account Jobs'
     'automationAccounts/jobs/write'            = 'Allows User to compromise Azure VM & Hybrid machines through Azure Automation Account Jobs'
@@ -2484,7 +2486,8 @@ Function Get-ARTADRoleAssignment {
         $Coll
 
         if($count -eq 0) {
-            Write-Host "[-] No Azure AD Role assignment found.`n" -ForegroundColor Red
+            Write-Host "[-] No Azure AD Role assignment found on current user." -ForegroundColor Red
+            Write-Warning "Try running Get-ARTADRoleAssignment -All to see all role assignments.`n"
         }
     }
     catch {
@@ -2560,7 +2563,8 @@ Function Get-ARTADScopedRoleAssignment {
         $Coll
 
         if($count -eq 0) {
-            Write-Host "[-] No Azure AD Scoped Role assignment found.`n" -ForegroundColor Red
+            Write-Host "[-] No Azure AD Scoped Role assignment found." -ForegroundColor Red
+            Write-Warning "Try running Get-ARTADScopedRoleAssignment -All to see all scoped role assignments`n"
         }
     }
     catch {
@@ -2608,7 +2612,7 @@ Function Get-ARTAccess {
 
             $res = Get-AzResource
 
-            Write-Host "`n=== Available Tenants:`n" -ForegroundColor Yellow
+            Write-Host "`n=== (1) Available Tenants:`n" -ForegroundColor Yellow
             $tenants = Get-ARTTenants
 
             if ($tenants -ne $null -and $tenants.Length -gt 0) {
@@ -2616,8 +2620,8 @@ Function Get-ARTAccess {
                 $tenants
             }
 
-            Write-Verbose "Step 1. Checking Dangerous Permissions that User has on Azure Resources..."
-            Write-Host "`n=== Dangerous Permissions on Azure Resources:`n" -ForegroundColor Yellow
+            Write-Verbose "Step 2. Checking Dangerous Permissions that User has on Azure Resources..."
+            Write-Host "`n=== (2) Dangerous Permissions on Azure Resources:`n" -ForegroundColor Yellow
             $res = Get-ARTDangerousPermissions -SubscriptionId $SubscriptionId
 
             if ($res -ne $null -and $res.Length -gt 0) {
@@ -2628,9 +2632,9 @@ Function Get-ARTAccess {
                 Write-Host "[-] User does not have any well-known dangerous permissions." -ForegroundColor Red
             }
 
-            Write-Verbose "Step 2. Checking accessible Azure Resources..."
+            Write-Verbose "Step 3. Checking accessible Azure Resources..."
 
-            Write-Host "`n=== Accessible Azure Resources:`n" -ForegroundColor Yellow
+            Write-Host "`n=== (3) Accessible Azure Resources:`n" -ForegroundColor Yellow
             $res = Get-ARTResource -SubscriptionId $SubscriptionId
 
             if ($res -ne $null) {
@@ -2642,8 +2646,8 @@ Function Get-ARTAccess {
             }
 
             try {
-                Write-Verbose "Step 3. Checking assigned Azure RBAC Roles..."
-                Write-Host "`n=== Assigned Azure RBAC Roles:`n" -ForegroundColor Yellow
+                Write-Verbose "Step 4. Checking assigned Azure RBAC Roles..."
+                Write-Host "`n=== (4) Assigned Azure RBAC Roles:`n" -ForegroundColor Yellow
 
                 $roles = Get-ARTRoleAssignment -SubscriptionId $SubscriptionId
                 if ($roles -ne $null -and $roles.Length -gt 0) {
@@ -2659,8 +2663,8 @@ Function Get-ARTAccess {
             }
 
             try {
-                Write-Verbose "Step 4. Checking accessible Azure Key Vault Secrets..."
-                Write-Host "`n=== Accessible Azure Key Vault Secrets:`n" -ForegroundColor Yellow
+                Write-Verbose "Step 5. Checking accessible Azure Key Vault Secrets..."
+                Write-Host "`n=== (5) Accessible Azure Key Vault Secrets:`n" -ForegroundColor Yellow
                 $secrets = Get-ARTKeyVaultSecrets
 
                 if ($secrets -ne $null) {
@@ -2676,8 +2680,8 @@ Function Get-ARTAccess {
             }
 
             try {
-                Write-Verbose "Step 5. Checking access to Az.AD / AzureAD via Az module..."
-                Write-Host "`n=== User Access to Az.AD:`n" -ForegroundColor Yellow
+                Write-Verbose "Step 6. Checking access to Az.AD / AzureAD via Az module..."
+                Write-Host "`n=== (6) User Access to Az.AD:`n" -ForegroundColor Yellow
                 $users = Get-AzADUser -First 1 -ErrorAction SilentlyContinue
 
                 if ($users -ne $null -and $users.Length -gt 0) {
@@ -2692,8 +2696,8 @@ Function Get-ARTAccess {
             }
 
             try {
-                Write-Verbose "Step 6. Enumerating resource group deployments..."
-                Write-Host "`n=== Resource Group Deployments:`n" -ForegroundColor Yellow
+                Write-Verbose "Step 7. Enumerating resource group deployments..."
+                Write-Host "`n=== (7) Resource Group Deployments:`n" -ForegroundColor Yellow
 
                 $resourcegroups = Get-AzResourceGroup
 
@@ -2785,7 +2789,7 @@ Function Get-ARTADAccess {
             }
             
             Write-Verbose "Step 1. Enumerating current $who group membership..."
-            Write-Host "`n=== Azure AD Groups that $who is member of:`n" -ForegroundColor Yellow
+            Write-Host "`n=== (1) Azure AD Groups that $who is member of:`n" -ForegroundColor Yellow
 
             try {
                 $sp = $null
@@ -2826,7 +2830,7 @@ Function Get-ARTADAccess {
             }
             
             Write-Verbose "Step 2. Checking assigned Azure AD Roles..."
-            Write-Host "`n=== Azure AD Roles assigned to current $($who):`n" -ForegroundColor Yellow
+            Write-Host "`n=== (2) Azure AD Roles assigned to current $($who):`n" -ForegroundColor Yellow
             try {
                 $roles = Get-ARTADRoleAssignment
 
@@ -2864,7 +2868,7 @@ Function Get-ARTADAccess {
             }
 
             Write-Verbose "Step 3. Checking Azure AD Scoped Roles..."
-            Write-Host "`n=== Azure AD Scoped Roles assigned to current $($who):`n" -ForegroundColor Yellow
+            Write-Host "`n=== (3) Azure AD Scoped Roles assigned to current $($who):`n" -ForegroundColor Yellow
             try {
                 $roles = Get-ARTADScopedRoleAssignment
 
@@ -2882,9 +2886,9 @@ Function Get-ARTADAccess {
             }
 
             Write-Verbose "Step 4. Checking Azure AD Applications owned..."
-            Write-Host "`n=== Azure AD Applications Owned By Current $($who):`n" -ForegroundColor Yellow
+            Write-Host "`n=== (4) Azure AD Applications Owned By Current $($who):`n" -ForegroundColor Yellow
             try {
-                $apps = Get-ARTADApplications
+                $apps = Get-ARTADApplication
 
                 if ($apps -ne $null ) {
                     Write-Host "[+] Azure AD Applications Owned:" -ForegroundColor Green
@@ -2896,18 +2900,21 @@ Function Get-ARTADAccess {
             }
             catch {
                 Write-Host "[-] $who does not own any Azure AD Application." -ForegroundColor Red
-                Write-Host "[-] Exception occured during Get-ARTADApplications:" -ForegroundColor Red
+                Write-Host "[-] Exception occured during Get-ARTADApplication:" -ForegroundColor Red
                 $Error[0].Exception.InnerException.StackTrace
             }
 
             Write-Verbose "Step 5. Checking Azure AD Dynamic Groups..."
-            Write-Host "`n=== Azure AD Dynamic Groups:`n" -ForegroundColor Yellow
+            Write-Host "`n=== (5) Azure AD Dynamic Groups:`n" -ForegroundColor Yellow
             try {
                 $dynamicGroups = Get-ARTADDynamicGroups -AccessToken $AccessToken
 
                 if ($dynamicGroups -ne $null ) {
                     Write-Host "[+] Azure AD Dynamic Groups:" -ForegroundColor Green
                     $dynamicGroups | ft
+                }
+                else {
+                    Write-Host "[-] No Azure AD Dynamic Groups found." -ForegroundColor Red
                 }
             }
             catch {
@@ -2917,7 +2924,7 @@ Function Get-ARTADAccess {
             }
 
             Write-Verbose "Step 6. Examining Administrative Units..."
-            Write-Host "`n=== Azure AD Administrative Units:`n" -ForegroundColor Yellow
+            Write-Host "`n=== (6) Azure AD Administrative Units:`n" -ForegroundColor Yellow
             
             $Coll = New-Object System.Collections.ArrayList
             try {
@@ -2952,7 +2959,7 @@ Function Get-ARTADAccess {
             }
 
             Write-Verbose "Step 7. Checking Azure AD Roles that are In-Use..."
-            Write-Host "`n=== Azure AD Roles Assigned In Tenant To Different Users:`n" -ForegroundColor Yellow
+            Write-Host "`n=== (7) Azure AD Roles Assigned In Tenant To Different Users:`n" -ForegroundColor Yellow
             
             $Coll = New-Object System.Collections.ArrayList
             try {
@@ -2986,6 +2993,25 @@ Function Get-ARTADAccess {
             catch {
                 Write-Host "[-] Could not list Azure AD Roles In-Use." -ForegroundColor Red
                 Write-Host "[-] Exception occured during Get-AzureADDirectoryRoleMember:" -ForegroundColor Red
+                $Error[0].Exception.InnerException.StackTrace
+            }
+
+            Write-Verbose "Step 8. Checking Azure AD Application Proxies..."
+            Write-Host "`n=== (8) Azure AD Application Proxies (be patient, this takes more time...):`n" -ForegroundColor Yellow
+            try {
+                $apps = Get-ARTADApplicationProxy
+
+                if ($apps -ne $null ) {
+                    Write-Host "[+] Azure AD Application Proxies:" -ForegroundColor Green
+                    $apps | ft
+                }
+                else {
+                    Write-Host "[-] No Azure AD Application Proxies found." -ForegroundColor Red
+                }
+            }
+            catch {
+                Write-Host "[-] Could not find Azure AD Application Proxy." -ForegroundColor Red
+                Write-Host "[-] Exception occured during Get-ARTADApplicationProxy:" -ForegroundColor Red
                 $Error[0].Exception.InnerException.StackTrace
             }
         }
@@ -3334,7 +3360,90 @@ Function Set-ARTADUserPassword {
 }
 
 
-Function Get-ARTADApplications {
+Function Get-ARTADApplicationProxy {
+    <#
+    .SYNOPSIS
+        Lists Azure AD Enterprise Applications that have Application Proxy setup.
+
+    .DESCRIPTION
+        Lists Azure AD Enterprise Applications that have Application Proxy setup.
+
+    .PARAMETER ObjectId
+        Specifies application which should be inspected.
+
+    .EXAMPLE
+        Example 1: Shows all visible to current user Azure AD application proxies.
+        PS C:\> Get-ARTADApplicationProxy
+
+        Example 2: Shows specific Application's Proxy
+        PS C:\> Get-ARTADApplicationProxy -ObjectId $Id
+    #>
+
+    [CmdletBinding()]
+    Param(
+        [Parameter(Mandatory=$False)]
+        [String]
+        $ObjectId = $null
+    )
+
+    try {
+        $EA = $ErrorActionPreference
+        $ErrorActionPreference = 'silentlycontinue'
+
+        $ObjectIdGiven = $false
+
+        if($ObjectId -eq $null -or $ObjectId.Length -eq 0) {
+            $apps = Get-AzureADApplication -All $true
+        }
+        else {
+            $apps = Get-AzureADApplication -ObjectId $ObjectId
+            $ObjectIdGiven = $true
+        }
+
+        $Coll = New-Object System.Collections.ArrayList
+        $count = 0
+
+        foreach ($app in $apps) {
+            try { 
+                Write-Verbose "Examining ($($app.ObjectId)): `"$($app.DisplayName)`" ..."
+
+                $out = Get-AzureADApplicationProxyApplication -ObjectId $app.ObjectId
+
+                if($out -ne $null) {
+                    $obj = [PSCustomObject]@{
+                        ApplicationName            = $app.DisplayName
+                        ApplicationId              = $app.AppId
+                        InternalUrl                = $out.InternalUrl
+                        ExternalUrl                = $out.ExternalUrl
+                        ExternalAuthenticationType = $out.ExternalAuthenticationType
+                    }
+
+                    $null = $Coll.Add($obj)
+                    $count += 1
+                }
+            } 
+            catch{
+            }
+        }
+
+        if($count -eq 0) {
+            Write-Warning "No applications with Application Proxy were found."
+        }
+
+        Return $Coll
+    }
+    catch {
+        Write-Host "[!] Function failed!" -ForegroundColor Red
+        Throw
+        Return
+    }
+    finally {
+        $ErrorActionPreference = $EA
+    }
+}
+
+
+Function Get-ARTADApplication {
     <#
     .SYNOPSIS
         Lists Azure AD Enterprise Applications that current user is owner of or owned by all users
@@ -3342,16 +3451,26 @@ Function Get-ARTADApplications {
     .DESCRIPTION
         Lists Azure AD Enterprise Applications that current user is owner of (or all existing when -All used) along with their owners and Service Principals
 
+    .PARAMETER ObjectId
+        Specifies application which should be inspected.
+
     .PARAMETER All
         Display all Azure AD role assignments. By default will show only applications that the current user is owner of.
 
     .EXAMPLE
         Example 1: Shows all visible to current user Azure AD applications, their owners and Service Principals.
-        PS C:\> Get-ARTADApplications -All
+        PS C:\> Get-ARTADApplication -All
+
+        Example 2: Examine specific application based on their ObjectId
+        PS C:\> Get-ARTADApplication -ObjectId $Id
     #>
 
     [CmdletBinding()]
     Param(
+        [Parameter(Mandatory=$False)]
+        [String]
+        $ObjectId = $null,
+
         [Parameter(Mandatory=$False)]
         [Switch]
         $All
@@ -3362,11 +3481,22 @@ Function Get-ARTADApplications {
         $ErrorActionPreference = 'silentlycontinue'
 
         $UserId = Get-ARTUserId
-        $apps = Get-AzureADApplication -All $true
+        $ObjectIdGiven = $false
+
+        if($ObjectId -eq $null -or $ObjectId.Length -eq 0) {
+            $apps = Get-AzureADApplication -All $true
+        }
+        else {
+            $apps = Get-AzureADApplication -ObjectId $ObjectId
+            $ObjectIdGiven = $true
+        }
 
         $Coll = New-Object System.Collections.ArrayList
+        $count = 0
 
         foreach ($app in $apps) {
+            Write-Verbose "Examining ($($app.ObjectId)): `"$($app.DisplayName)`" ..."
+
             $owner = Get-AzureADApplicationOwner -ObjectId $app.ObjectId
             $sp = Get-AzureADServicePrincipal -Filter "AppId eq '$($app.AppId)'"
             $spmembership1 = Get-AzureADServicePrincipalMembership -ObjectId $sp.ObjectId
@@ -3383,24 +3513,52 @@ Function Get-ARTADApplications {
                 $null = $spgroups.Add($obj)                
             }
 
-            $obj = [PSCustomObject]@{
-                ApplicationName      = $app.DisplayName
-                ApplicationId        = $app.AppId
-                OwnerName            = $owner.DisplayName
-                OwnerPrincipalName   = $owner.UserPrincipalName
-                OwnerType            = $owner.UserType
-                OwnerId              = $owner.ObjectId
-                ServicePrincipalId   = $sp.ObjectId
-                ServicePrincipalType = $sp.ServicePrincipalType
-                ServicePrincipalMembership = $spgroups
+            if($ObjectIdGiven) {
+                $out = Get-ARTADApplicationProxy -ObjectId $ObjectId
+
+                $obj = [PSCustomObject]@{
+                    ApplicationName      = $app.DisplayName
+                    ApplicationId        = $app.ObjectId
+                    OwnerName            = $owner.DisplayName
+                    OwnerPrincipalName   = $owner.UserPrincipalName
+                    OwnerType            = $owner.UserType
+                    OwnerId              = $owner.ObjectId
+                    HasApplicationProxy  = $hasProxy
+                    ServicePrincipalId   = $sp.ObjectId
+                    ServicePrincipalType = $sp.ServicePrincipalType
+                    ServicePrincipalMembership = $spgroups
+                    AppProxyExternalUrl  = $out.ExternalUrl
+                    AppProxyInternalUrl  = $out.InternalUrl
+                    AppProxyExternalAuthenticationType  = $out.ExternalAuthenticationType
+                }
+            }
+            else {
+                $obj = [PSCustomObject]@{
+                    ApplicationName      = $app.DisplayName
+                    ApplicationId        = $app.ObjectId
+                    OwnerName            = $owner.DisplayName
+                    OwnerPrincipalName   = $owner.UserPrincipalName
+                    OwnerType            = $owner.UserType
+                    OwnerId              = $owner.ObjectId
+                    HasApplicationProxy  = $hasProxy
+                    ServicePrincipalId   = $sp.ObjectId
+                    ServicePrincipalType = $sp.ServicePrincipalType
+                    ServicePrincipalMembership = $spgroups
+                }
             }
 
-            if($All) {
+            if($All -or $ObjectIdGiven) {
                 $null = $Coll.Add($obj)
+                $count += 1
             }
             elseif ($UserId -eq $ServicePrincipalId -or $UserId -eq $owner.ObjectId) {
                 $null = $Coll.Add($obj)
+                $count += 1
             }
+        }
+
+        if($count -eq 0) {
+            Write-Warning "No applications that this user is owner of. Try running Get-ARTADApplication -All to see all applications."
         }
 
         Return $Coll

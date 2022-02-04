@@ -106,7 +106,7 @@ PS C:\> Get-Help Connect-ART
 
 - **`Get-ARTADDynamicGroups`** - Displays Azure AD Dynamic Groups along with their user Membership Rules, members count and current user membership status
 
-- **`Get-ARTADApplications`** - Lists Azure AD Enterprise Applications that current user is owner of (or all existing when -All used) along with their owners and Service Principals
+- **`Get-ARTADApplication`** - Lists Azure AD Enterprise Applications that current user is owner of (or all existing when -All used) along with their owners and Service Principals
 
 - **`Get-ARTKeyVaultSecrets`** - Lists all available Azure Key Vault secrets. This cmdlet assumes that requesting user connected to the Azure AD with KeyVaultAccessToken (scoped to https://vault.azure.net) and has "Key Vault Secrets User" role assigned (or equivalent).
 
