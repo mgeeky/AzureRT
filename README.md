@@ -112,7 +112,11 @@ PS C:\> Get-Help Connect-ART
 
 - **`Get-ARTApplicationProxyPrincipals`** - Displays users and groups assigned to the specified Application Proxy application.
 
+- **`Get-ARTStorageAccountKeys`** - Displays all the available Storage Account keys.
+
 - **`Get-ARTKeyVaultSecrets`** - Lists all available Azure Key Vault secrets. This cmdlet assumes that requesting user connected to the Azure AD with KeyVaultAccessToken (scoped to https://vault.azure.net) and has "Key Vault Secrets User" role assigned (or equivalent).
+
+- **`Get-ARTAutomationCredentials`** - Lists all available Azure Automation Account credentials and attempts to pull their values (unable to pull values!).
 
 - **`Get-ARTAutomationRunbookCode`** - Invokes REST API method to pull specified Runbook's source code.
 
@@ -149,13 +153,13 @@ PS C:\> Get-Help Connect-ART
 
 ### Misc
 
+- **`Get-ARTTenantID`** - Retrieves Current user's Tenant ID or Tenant ID based on Domain name supplied.
+
 - **`Get-ARTPRTToken`** - Retrieves Current user's PRT (Primary Refresh Token) value using [Dirk-Jan Mollema's ROADtoken](https://github.com/dirkjanm/ROADtoken)
 
 - **`Get-ARTPRTNonce`** - Retrieves Current user's PRT (Primary Refresh Token) nonce value
 
 - **`Get-ARTUserId`** - Acquires current user or user specified in parameter ObjectId via `Az` module
-
-- **`Get-ARTTenantID`** - Retrieves Current user's Tenant ID
 
 - **`Get-ARTSubscriptionId`** - Helper that collects current Subscription ID.
 

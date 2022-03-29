@@ -18,7 +18,9 @@
 #
 
 $KnownDangerousPermissions = @{      
-    '`*/`*'  = 'UNLIMITED PRIVILEGES IN THE ENTIRE AZURE SUBSCRIPTION!'
+    '`*/`*'    = 'UNLIMITED PRIVILEGES IN THE ENTIRE AZURE SUBSCRIPTION!'
+    '`*/read'  = 'Can read all sensitive data on a specified resource/service!'
+    '`*/write' = 'Can MODIFY all settings and data on a specified resource/service!'
 
     'storageAccounts/read'                                = 'Allows User to read Storage Accounts and related Blobs'
     'storageAccounts/blobServices/containers/read'        = 'Allows User to read Blobs Containers'
@@ -58,7 +60,8 @@ $KnownDangerousPermissions = @{
     'users/authenticationMethods/delete'       = 'User can delete Authentication Method of another user.'
     'users/authenticationMethods/basic/update' = 'User can update authentication methods of another user'
 
-    '/`*' = 'Unlimited privileges in a specified Azure Service. May result in data compromise, infiltration and other attacks.'
+    '/`*' = 'Unlimited privileges in a specified Azure Service. May result in data compromise, infiltration and other attacks.'    
+    #'`*'  = 'Unlimited privileges in this specific resource/service!'
 }
 
 
@@ -197,33 +200,38 @@ Function Get-ARTWhoami {
         }
     }
 
-    if ((Get-Command Get-MGContext) -and ($All -or $MGraph)) {
-        Write-Host "=== Microsoft Graph context (Microsoft.Graph module):" -ForegroundColor Yellow
-        
-        try {
-            $mgContext = Get-MGContext
+    try {
+        if (($All -or $MGraph) -and (Get-Command Get-MGContext -ErrorAction SilentlyContinue)) {
+            Write-Host "=== Microsoft Graph context (Microsoft.Graph module):" -ForegroundColor Yellow
+            
+            try {
+                $mgContext = Get-MGContext
 
-            if($CheckToken) {
-                try {
-                    Get-MGOrganization -ErrorAction SilentlyContinue | Out-Null
-                    Write-Host "`n[+] Token is valid on Microsoft Graph." -ForegroundColor Green
-                }
-                catch {
-                    if($PSItem.Exception.Message -like '*Insufficient privileges to complete the operation*') {
+                if($CheckToken) {
+                    try {
+                        Get-MGOrganization -ErrorAction SilentlyContinue | Out-Null
                         Write-Host "`n[+] Token is valid on Microsoft Graph." -ForegroundColor Green
                     }
-                    else {
-                        Write-Host "`n[-] Token is invalid on Microsoft Graph." -ForegroundColor Red
+                    catch {
+                        if($PSItem.Exception.Message -like '*Insufficient privileges to complete the operation*') {
+                            Write-Host "`n[+] Token is valid on Microsoft Graph." -ForegroundColor Green
+                        }
+                        else {
+                            Write-Host "`n[-] Token is invalid on Microsoft Graph." -ForegroundColor Red
+                        }
                     }
                 }
+
+                $mgContext | Select Account,AppName,ContextScope,ClientId,TenantId,AuthType | fl
+
+            } catch {
+                Write-Host "[!] Not authenticated to Microsoft.Graph.`n" -ForegroundColor Red
+                Write-Host ""
             }
-
-            $mgContext | Select Account,AppName,ContextScope,ClientId,TenantId,AuthType | fl
-
-        } catch {
-            Write-Host "[!] Not authenticated to Azure AD.`n" -ForegroundColor Red
-            Write-Host ""
         }
+    } catch {
+        Write-Host "[!] Microsoft.Graph module not loaded. Load it with Import-Module MSOnline`n" -ForegroundColor Red
+        Write-Host ""
     }
 
     if($All -or $AzCli) {
@@ -615,6 +623,12 @@ Function Connect-ART {
         elseif (($PsCmdlet.ParameterSetName -eq "Credentials2") -and ($Credentials -ne $null)) {
             if($ServicePrincipal) {
 
+                $Username = $Credentials.UserName
+
+                if(-not ($Username -match '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}')) {
+                    throw "Service Principal Username must follow a GUID scheme!"
+                }
+
                 Write-Verbose "Azure authentication via provided Service Principal PSCredential object..."
 
                 if($TenantId -eq $null -or $TenantId.Length -eq 0) {
@@ -633,6 +647,10 @@ Function Connect-ART {
             $creds = New-Object System.Management.Automation.PSCredential ($Username, $passwd)
 
             if($ServicePrincipal) {
+
+                if(-not ($Username -match '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}')) {
+                    throw "Service Principal Username must follow a GUID scheme!"
+                }
 
                 Write-Verbose "Azure authentication via provided Service Principal creds..."
 
@@ -1463,9 +1481,17 @@ Function Get-ARTDangerousPermissions {
             catch {
                 $permissions = @()
             }
+            
+            $once = $false
 
             foreach ($dangperm in $KnownDangerousPermissions.GetEnumerator()) {
                 foreach ($perm in $permissions) {
+                    
+                    if(-not $once) {
+                        Write-Verbose "Checking permission $perm on $($_.Name) ..."
+                        $once = $true
+                    }
+
                     if ($perm -like "*$($dangperm.Name)*") {
 
                         $obj = [PSCustomObject]@{
@@ -1609,12 +1635,10 @@ Function Get-ARTResource {
         $Coll = New-Object System.Collections.ArrayList
 
         $resources | % {
-            try
-            {
+            try {
                 $permissions = ((Invoke-RestMethod -Uri "https://management.azure.com$($_.id)/providers/Microsoft.Authorization/permissions?api-version=2018-07-01" -Headers $headers).value).actions
             }
-            catch
-            {
+            catch {
                 $permissions = @()
             }
 
@@ -1630,7 +1654,7 @@ Function Get-ARTResource {
         }
 
         if ($Text) {
-            Write-Host "=== Accessible Azure Resources & Permissions ==`n"
+            Write-Host "=== Accessible Azure Resources & Permissions =="
 
             $num = 1
             $Coll | % {
@@ -1645,8 +1669,11 @@ Function Get-ARTResource {
                     Write-Host "`t`t- $_"
                 }
 
+
                 $num += 1
             }
+
+            Write-Host
         }
         else {
             $Coll
@@ -2390,25 +2417,183 @@ Function Get-ARTKeyVaultSecrets {
         $ErrorActionPreference = 'silentlycontinue'
 
         $Coll = New-Object System.Collections.ArrayList
-        
+
         Get-AzKeyVault | % {
             $VaultName = $_.VaultName
 
-            Get-AzKeyVaultSecret -VaultName $VaultName | % {
-                $SecretName = $_.Name
+            try {
+                $secrets = Get-AzKeyVaultSecret -VaultName $VaultName -ErrorAction Stop
 
-                $value = Get-AzKeyVaultSecret -VaultName $VaultName -Name $SecretName -AsPlainText
+                $secrets | % {
+                    $SecretName = $_.Name
 
-                $obj = [PSCustomObject]@{
-                    VaultName = $VaultName
-                    Name      = $SecretName
-                    Value     = $value
-                    Created   = $_.Created
-                    Updated   = $_.Updated
-                    Enabled   = $_.Enabled
+                    $value = Get-AzKeyVaultSecret -VaultName $VaultName -Name $SecretName -AsPlainText
+
+                    $obj = [PSCustomObject]@{
+                        VaultName = $VaultName
+                        Name      = $SecretName
+                        Value     = $value
+                        Created   = $_.Created
+                        Updated   = $_.Updated
+                        Enabled   = $_.Enabled
+                    }
+
+                    $null = $Coll.Add($obj)
+                }
+            }
+            catch {
+                Write-Host "[!] Get-AzKeyVaultSecret -VaultName $($VaultName) failed:`n $_" -ForegroundColor Red
+                #Write-Error $Error[0].Exception.InnerException.StackTrace
+
+                Write-Host "`n[!!!] Make sure your Access Token is scoped to https://vault.azure.net [!!!]`n" -ForegroundColor Red
+                Write-Host "Authenticate with:`n`tConnect-ART -AccessToken `$AccessToken -KeyVaultAccessToken `$KeyVaultToken`n"
+            }
+        }
+
+        Return $Coll
+    }
+    catch {
+        Write-Host "[!] Function failed!" -ForegroundColor Red
+        Throw
+        Return
+    }
+    finally {
+        $ErrorActionPreference = $EA
+    }
+}
+
+
+Function Get-ARTStorageAccountKeys {
+    <#
+    .SYNOPSIS
+        Displays all the available Storage Account keys.
+
+    .DESCRIPTION
+        Displays all the available Storage Account keys.
+
+    .EXAMPLE
+        PS> Get-ARTStorageAccountKeys
+    #>
+    [CmdletBinding()]
+    Param(
+    )
+    
+    try {
+        $EA = $ErrorActionPreference
+        $ErrorActionPreference = 'silentlycontinue'
+
+        $Coll = New-Object System.Collections.ArrayList
+
+        Get-AzStorageAccount | % {
+            $AccountName       = $_.StorageAccountName
+            $ResourceGroupName = $_.ResourceGroupName                                                
+
+            try {
+                $keys = Get-AzStorageAccountKey -Name $AccountName -ResourceGroupName $ResourceGroupName -ErrorAction Stop
+
+                $keys | % {
+
+                    $obj = [PSCustomObject]@{
+                        KeyName            = $_.KeyName
+                        ResourceGroupName  = $ResourceGroupName
+                        StorageAccountName = $AccountName
+                        StorageAccountKey  = $_.Value
+                        Permissions        = $_.Permissions
+                        CreationTime       = $_.CreationTime
+                    }
+
+                    $null = $Coll.Add($obj)
+                }
+            }
+            catch {
+                Write-Host "[!] Get-ARTStorageAccountKeys -Name $($AccountName) failed:`n $_" -ForegroundColor Red
+                #Write-Error $Error[0].Exception.InnerException.StackTrace
+            }
+        }
+
+        Return $Coll
+    }
+    catch {
+        Write-Host "[!] Function failed!" -ForegroundColor Red
+        Throw
+        Return
+    }
+    finally {
+        $ErrorActionPreference = $EA
+    }
+}
+
+
+Function Get-ARTAutomationCredentials {
+    <#
+    .SYNOPSIS
+        Displays all the automation accounts and their related credentials metadata (unable to pull values!).
+
+    .DESCRIPTION
+        Lists all available automation account credentials (unable to pull values!).
+
+    .PARAMETER AutomationAccountName
+        Azure Automation account name that contains target runbook.
+
+    .PARAMETER ResourceGroupName
+        Azure Resource Group name that contains target Automation Account
+
+    .PARAMETER SubscriptionId
+        Azure Subscrition ID that contains target Resource Group
+
+    .EXAMPLE
+        PS> Get-ARTAutomationCredentials
+    #>
+
+    [CmdletBinding()]
+    Param(
+        [Parameter(Mandatory=$False)]
+        [String]
+        $SubscriptionId = $null,
+
+        [Parameter(Mandatory=$False)]
+        [String]
+        $AutomationAccountName = $null,
+
+        [Parameter(Mandatory=$False)]
+        [String]
+        $ResourceGroupName = $null
+    )
+
+    try {
+        $EA = $ErrorActionPreference
+        $ErrorActionPreference = 'silentlycontinue'
+
+        $Coll = New-Object System.Collections.ArrayList
+        
+        if(($AutomationAccount -eq $null -or $AutomationAccountName.Length -eq 0) -or ($ResourceGroupName -eq $null -or $ResourceGroupName.Length -eq 0) -or ($SubscriptionId -eq $null -or $SubscriptionId.Length -eq 0)) {
+            Get-AzAutomationAccount | % {
+                $AutomationAccount = $_
+
+                Write-Verbose "Enumerating account $($AutomationAccount.AutomationAccountName) in resource group $($AutomationAccount.ResourceGroupName) ..."
+
+                Get-AzAutomationCredential -AutomationAccountName $AutomationAccount.AutomationAccountName -ResourceGroupName $AutomationAccount.ResourceGroupName | % {
+                    $Credential = $_
+
+                    Write-Verbose "`tPulling credential $($Runbook.Name) ..."
+
+                    $obj = [PSCustomObject]@{
+                        Name                  = $_.Name
+                        UserName              = $_.UserName
+                        ResourceGroupName     = $_.ResourceGroupName
+                        AutomationAccountName = $_.AutomationAccountName
+                        CreationTime          = $_.CreationTime
+                        LastModifiedTime      = $_.LastModifiedTime
+                        Description           = $_.Description
+                    }
+
+                    $null = $Coll.Add($obj)
+
                 }
 
-                $null = $Coll.Add($obj)
+                if(($SubscriptionId -ne $null -and $SubscriptionId.Length -gt 0) -and ($AutomationAccountName -ne $null -and $AutomationAccountName.Length -gt 0) -and ($ResourceGroupName -ne $null -and $ResourceGroupName.Length -gt 0)) {
+                    break
+                }
             }
         }
 
@@ -2612,97 +2797,132 @@ Function Get-ARTAccess {
 
             $res = Get-AzResource
 
-            Write-Host "`n=== (1) Available Tenants:`n" -ForegroundColor Yellow
+            Write-Host "=== (1) Available Tenants:`n" -ForegroundColor Yellow
             $tenants = Get-ARTTenants
 
-            if ($tenants -ne $null -and $tenants.Length -gt 0) {
+            if ($tenants -ne $null) {
                 Write-Host "[+] Azure Tenants are available for the current user:" -ForegroundColor Green
-                $tenants
+                $tenants | fl
             }
 
             Write-Verbose "Step 2. Checking Dangerous Permissions that User has on Azure Resources..."
-            Write-Host "`n=== (2) Dangerous Permissions on Azure Resources:`n" -ForegroundColor Yellow
+            Write-Host "=== (2) Dangerous Permissions on Azure Resources:`n" -ForegroundColor Yellow
             $res = Get-ARTDangerousPermissions -SubscriptionId $SubscriptionId
 
-            if ($res -ne $null -and $res.Length -gt 0) {
+            if ($res -ne $null ) {
                 Write-Host "[+] Following Dangerous Permissions were Identified on Azure Resources:" -ForegroundColor Green
-                $res
+                $res | fl
             }
             else {
-                Write-Host "[-] User does not have any well-known dangerous permissions." -ForegroundColor Red
+                Write-Host "[-] User does not have any well-known dangerous permissions.`n" -ForegroundColor Red
             }
 
             Write-Verbose "Step 3. Checking accessible Azure Resources..."
 
-            Write-Host "`n=== (3) Accessible Azure Resources:`n" -ForegroundColor Yellow
+            Write-Host "=== (3) Accessible Azure Resources:`n" -ForegroundColor Yellow
             $res = Get-ARTResource -SubscriptionId $SubscriptionId
 
             if ($res -ne $null) {
-                Write-Host "[+] Accessible Azure Resources & corresponding permissions:`n" -ForegroundColor Green
-                $res
+                Write-Host "[+] Accessible Azure Resources & corresponding permissions:" -ForegroundColor Green
+                $res | fl
             }
             else {
-                Write-Host "[-] User does not have access to any Azure Resource." -ForegroundColor Red
+                Write-Host "[-] User does not have access to any Azure Resource.`n" -ForegroundColor Red
             }
 
             try {
                 Write-Verbose "Step 4. Checking assigned Azure RBAC Roles..."
-                Write-Host "`n=== (4) Assigned Azure RBAC Roles:`n" -ForegroundColor Yellow
+                Write-Host "=== (4) Assigned Azure RBAC Roles:`n" -ForegroundColor Yellow
 
-                $roles = Get-ARTRoleAssignment -SubscriptionId $SubscriptionId
-                if ($roles -ne $null -and $roles.Length -gt 0) {
+                $roles = Get-ARTRoleAssignment
+
+                if ($roles -ne $null ) {
                     Write-Host "[+] Azure RBAC Roles Assigned:" -ForegroundColor Green
                     $roles | ft
                 }
                 else {
-                    Write-Host "[-] User does not have any Azure RBAC Role assigned." -ForegroundColor Red
+                    Write-Host "[-] User does not have any Azure RBAC Role assigned.`n" -ForegroundColor Red
                 }
             }
             catch {
-                Write-Host "[-] User does not have any Azure RBAC Role assigned." -ForegroundColor Red
+                Write-Host "[-] User does not have any Azure RBAC Role assigned or exception was thrown.`n" -ForegroundColor Red
             }
 
             try {
                 Write-Verbose "Step 5. Checking accessible Azure Key Vault Secrets..."
-                Write-Host "`n=== (5) Accessible Azure Key Vault Secrets:`n" -ForegroundColor Yellow
+                Write-Host "=== (5) Accessible Azure Key Vault Secrets:`n" -ForegroundColor Yellow
                 $secrets = Get-ARTKeyVaultSecrets
 
                 if ($secrets -ne $null) {
                     Write-Host "[+] Azure Key Vault Secrets accessible:" -ForegroundColor Green
-                    $secrets
+                    $secrets | fl
                 }
                 else {
-                    Write-Host "[-] User could not access Key Vault Secrets or there were no available." -ForegroundColor Red
+                    Write-Host "[-] User could not access Key Vault Secrets or there were no available.`n" -ForegroundColor Red
                 }
             }
             catch {
-                Write-Host "[-] User could not access Key Vault Secrets or there were no available." -ForegroundColor Red
+                Write-Host "[-] User could not access Key Vault Secrets or there were no available or exception was thrown.`n" -ForegroundColor Red
             }
 
             try {
-                Write-Verbose "Step 6. Checking access to Az.AD / AzureAD via Az module..."
-                Write-Host "`n=== (6) User Access to Az.AD:`n" -ForegroundColor Yellow
+                Write-Verbose "Step 6. Checking accessible Storage Account Keys..."
+                Write-Host "=== (6) Accessible Storage Account Keys:`n" -ForegroundColor Yellow
+                $secrets = Get-ARTStorageAccountKeys
+
+                if ($secrets -ne $null) {
+                    Write-Host "[+] Storage Account Keys accessible:" -ForegroundColor Green
+                    $secrets | fl
+                }
+                else {
+                    Write-Host "[-] User could not access Storage Account Keys or there were no available.`n" -ForegroundColor Red
+                }
+            }
+            catch {
+                Write-Host "[-] User could not access Storage Account Keys or there were no available or exception was thrown.`n" -ForegroundColor Red
+            }
+
+            try {
+                Write-Verbose "Step 7. Checking accessible Automation Account Secrets..."
+                Write-Host "=== (7) Accessible Automation Account Secrets:`n" -ForegroundColor Yellow
+                $secrets = Get-ARTAutomationCredentials
+
+                if ($secrets -ne $null) {
+                    Write-Host "[+] Automation Account Secrets accessible:" -ForegroundColor Green
+                    $secrets | fl
+                }
+                else {
+                    Write-Host "[-] User could not access Automation Account Secrets or there were no available.`n" -ForegroundColor Red
+                }
+            }
+            catch {
+                Write-Host "[-] User could not access Automation Account Secrets or there were no available or exception was thrown.`n" -ForegroundColor Red
+            }
+
+            try {
+                Write-Verbose "Step 8. Checking access to Az.AD / AzureAD via Az module..."
+                Write-Host "=== (8) User Access to Az.AD:`n" -ForegroundColor Yellow
                 $users = Get-AzADUser -First 1 -ErrorAction SilentlyContinue
 
                 if ($users -ne $null -and $users.Length -gt 0) {
-                    Write-Host "[+] User has access to Azure AD via Az.AD module (e.g. Get-AzADUser)." -ForegroundColor Green
+                    Write-Host "[+] User has access to Azure AD via Az.AD module (e.g. Get-AzADUser).`n" -ForegroundColor Green
                 }
                 else {
-                    Write-Host "[-] User has no access to Azure AD via Az.AD module (e.g. Get-AzADUser)." -ForegroundColor Red
+                    Write-Host "[-] User has no access to Azure AD via Az.AD module (e.g. Get-AzADUser).`n" -ForegroundColor Red
                 }
             }
             catch {
-                Write-Host "[-] User has no access to Azure AD via Az.AD module (e.g. Get-AzADUser)." -ForegroundColor Red
+                Write-Host "[-] User has no access to Azure AD via Az.AD module (e.g. Get-AzADUser) or exception was thrown.`n" -ForegroundColor Red
             }
 
             try {
-                Write-Verbose "Step 7. Enumerating resource group deployments..."
-                Write-Host "`n=== (7) Resource Group Deployments:`n" -ForegroundColor Yellow
+                Write-Verbose "Step 9. Enumerating resource group deployments..."
+                Write-Host "=== (9) Resource Group Deployments:`n" -ForegroundColor Yellow
 
                 $resourcegroups = Get-AzResourceGroup
 
                 if($resourcegroups -eq $null -or $resourcegroups.Length -eq 0) {
-                    Write-Host "[-] No resource groups available to the user." -ForegroundColor Red
+                    Write-Host "[-] No resource groups available to the user.`n" -ForegroundColor Red
                 }
                 else {
                     $found = $false
@@ -2722,12 +2942,12 @@ Function Get-ARTAccess {
                     }
 
                     if ($found -eq $false) {
-                        Write-Host "[-] User has no access to Resource Group Deployments or there were no defined." -ForegroundColor Red
+                        Write-Host "[-] User has no access to Resource Group Deployments or there were no defined.`n" -ForegroundColor Red
                     }
                 }
             }
             catch {
-                Write-Host "[-] User has no access to Resource Group Deployments or there were no defined." -ForegroundColor Red
+                Write-Host "[-] User has no access to Resource Group Deployments or there were no defined or exception was thrown.`n" -ForegroundColor Red
             }
         }
         catch {
@@ -4332,38 +4552,53 @@ Function Get-ARTTenants {
 Function Get-ARTTenantID {
     <#
     .SYNOPSIS
-        Retrieves Current user's Tenant ID
+        Retrieves Current user's Tenant ID or Tenant ID based on Domain name supplied.
 
     .DESCRIPTION
-        Retrieves Current user's Tenant ID
+        Retrieves Current user's Tenant ID or Tenant ID based on Domain name supplied.
 
     .EXAMPLE
         PS C:\> Get-ARTTenantID
     #>
     [CmdletBinding()]
     Param(
+        [string]
+        $DomainName = $null
     )
 
     $TenantId = $null
 
-    try {
-        $TenantId = (Get-AzContext).Tenant.Id
-        Write-Verbose "Tenant ID acquired via Az module: $TenantId"
-
-    } catch {
+    if($DomainName -eq $null -or $DomainName.Length -eq 0) {
         try {
-            $TenantId = (Get-AzureADCurrentSessionInfo).Tenant.Id
-            Write-Verbose "Tenant ID acquired via AzureAD module: $TenantId"
-        }
-        catch{
+            $TenantId = (Get-AzContext).Tenant.Id
+            Write-Verbose "Tenant ID acquired via Az module: $TenantId"
+
+        } catch {
             try {
-                $TenantId = (dsregcmd /status | sls -Pattern 'TenantId\s+:\s+(.+)').Matches.Groups[1].Value
-                Write-Verbose "Tenant ID acquired via dsregcmd parsing: $TenantId"
+                $TenantId = (Get-AzureADCurrentSessionInfo).Tenant.Id
+                Write-Verbose "Tenant ID acquired via AzureAD module: $TenantId"
             }
-            catch {
-                Write-Verbose "Could not acquire Tenant ID!"
+            catch{
+                try {
+                    $TenantId = (dsregcmd /status | sls -Pattern 'TenantId\s+:\s+(.+)').Matches.Groups[1].Value
+                    Write-Verbose "Tenant ID acquired via dsregcmd parsing: $TenantId"
+                }
+                catch {
+                    Write-Error "Could not acquire Tenant ID!"
+                }
             }
         }
+    }
+    else {
+        Try {
+            $openIDConfig = Invoke-RestMethod -UseBasicParsing "https://login.microsoftonline.com/$DomainName/.well-known/openid-configuration"
+        }
+        catch {
+            Write-Error "Could not acquire Tenant ID!"
+            return $null
+        }
+
+        $TenantId = $openIDConfig.authorization_endpoint.Split("/")[3]
     }
 
     Return $TenantId
