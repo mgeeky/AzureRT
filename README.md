@@ -2,7 +2,32 @@
 
 Powershell module implementing various cmdlets to interact with Azure and Azure AD from an offensive perspective.
 
-Helpful utilities dealing with access token based authentication, easily switching from `Az` to `AzureAD` and `az cli` interfaces, easy to use pre-made attacks such as Runbook-based command execution and more.
+Helpful utilities dealing with access token based authentication, switching from `Az` to `AzureAD` and `az cli` interfaces, easy to use pre-made attacks such as Runbook-based command execution and more.
+
+---
+
+## The Most Valuable Cmdlets
+
+This toolkit brings lots of various cmdlets. This section highlights the most important & useful ones.
+
+Typical Red Team / audit workflow starting with stolen credentials can be summarised as follows:
+
+```
+Credentials Stolen -> Authenticate to Azure/AzureAD -> find whether they're valid -> find out what you can do with them
+```
+
+The below cmdlets are precisely suited to help you follow this sequence:
+
+1. **`Connect-ART`** - Offers various means to authenticate to Azure - credentials, PSCredential, token
+
+2. **`Connect-ARTAD`** - Offers various means to authenticate to Azure AD - credentials, PSCredential, token
+
+3. **`Get-ARTWhoami`** - When you authenticate - run this to check _whoami_ and validate your access
+
+4. **`Get-ARTAccess`** - Then, when you know you have access - find out what you can do & what's possible by performing Azure situational awareness
+
+5. **`Get-ARTADAccess`** - Similarly you can find out what you can do scoped to Azure AD.
+
 
 ---
 
@@ -18,8 +43,6 @@ Cmdlets implemented in this module came helpful in following use & attack scenar
 - Authenticate as a Service Principal to leverage _Privileged Role Administrator_ role assigned to that Service Principal
 - Execute attack against Azure Automation via malicious Runbook
 
-I'm developing next cmdlets along the way of learning Azure & Azure AD threat surface and offensive perspective. Therefore, most of these cmdlets came handy to me at least once on my journey.
-
 ---
 
 ## Installation
@@ -34,6 +57,9 @@ Install-Module Microsoft.Graph -Force -Confirm -AllowClobber -Scope CurrentUser 
 Install-Module MSOnline -Force -Confirm -AllowClobber -Scope CurrentUser        # OPTIONAL
 Install-Module AzureADPreview -Force -Confirm -AllowClobber -Scope CurrentUser  # OPTIONAL
 Install-Module AADInternals -Force -Confirm -AllowClobber -Scope CurrentUser    # OPTIONAL
+
+Import-Module Az
+Import-Module AzureAD
 ```
 
 Even though only first two modules are required by `AzureRT`, its good to have others pre-installed too.
@@ -45,6 +71,14 @@ PS> . .\AzureRT.ps1
 ```
 
 And you're good to go.
+
+Or you can let **AzureRT** to install and import all the dependencies:
+
+```
+PS> . .\AzureRT.ps1
+PS> Import-ARTModules
+```
+
 
 ---
 
