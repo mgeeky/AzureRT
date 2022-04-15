@@ -1024,9 +1024,9 @@ Function Connect-ARTAD {
                 Parse-JWTtokenRT $AccessToken
             }
         }
-        elseif (($PsCmdlet.ParameterSetName -eq "Credentials2") -and ($Credentials -ne $null)) {
+        elseif (($PsCmdlet.ParameterSetName -eq "Credentials2") -and ($Credential -ne $null)) {
             Write-Verbose "Azure AD authentication via provided PSCredential object..."
-            Connect-AzureAD -Credential $Credentials
+            Connect-AzureAD -Credential $Credential
         }
         else {
             $passwd = ConvertTo-SecureString $Password -AsPlainText -Force
