@@ -620,10 +620,10 @@ Function Connect-ART {
                 Parse-JWTtokenRT $AccessToken
             }
         }
-        elseif (($PsCmdlet.ParameterSetName -eq "Credentials2") -and ($Credentials -ne $null)) {
+        elseif (($PsCmdlet.ParameterSetName -eq "Credentials2") -and ($Credential -ne $null)) {
             if($ServicePrincipal) {
 
-                $Username = $Credentials.UserName
+                $Username = $Credential.UserName
 
                 if(-not ($Username -match '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}')) {
                     throw "Service Principal Username must follow a GUID scheme!"
@@ -635,11 +635,11 @@ Function Connect-ART {
                     throw "Tenant ID not provided! Pass it in -TenantId parameter."
                 }
 
-                Connect-AzAccount -Credential $Credentials -ServicePrincipal -Tenant $TenantId
+                Connect-AzAccount -Credential $Credential -ServicePrincipal -Tenant $TenantId
 
             } Else {
                 Write-Verbose "Azure authentication via provided PSCredential object..."
-                Connect-AzAccount -Credential $Credentials
+                Connect-AzAccount -Credential $Credential
             }
         }
         else {
